@@ -3,11 +3,15 @@ import { useEffect, useState, type ReactNode } from "react";
 import { 
   LayoutDashboard, Calculator, Megaphone, MessagesSquare, Users, TrendingUp, Search, Command, BrainCircuit,
   BarChart3, Wallet, Receipt, Scale, CheckSquare, PieChart as PieIcon, Package, Truck, Target, Sliders, ShieldAlert,
-  Compass, Calendar, AlertTriangle, Star, Bell, FileText, BookOpen, Settings, ChevronDown, ChevronRight, Gauge
+  Compass, Calendar, AlertTriangle, Star, Bell, FileText, BookOpen, Settings, ChevronDown, ChevronRight, Gauge,
+  LogIn, LogOut, User
 } from "lucide-react";
 import { CommandDialog, CommandInput, CommandList, CommandItem, CommandEmpty, CommandGroup } from "@/components/ui/command";
 import { products } from "@/lib/data";
 import { useCentralModo, setCentralModo, type CentralModo } from "@/lib/modo";
+import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 const operacaoNav = [
   { to: "/", label: "Central", icon: LayoutDashboard },
@@ -103,6 +107,17 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false);
   const { modo, aba } = useCentralModo();
   const navigate = useNavigate();
+  const { user, session } = useAuth();
+
+  const handleLogout = async () => {
+    try {
+      await supabase.auth.signOut();
+      toast.success("Sessão encerrada com sucesso.");
+      navigate({ to: "/login" });
+    } catch {
+      toast.error("Erro ao encerrar sessão.");
+    }
+  };
 
   // Collapsed groups state for Gestão sidebar
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
@@ -254,9 +269,36 @@ export function AppShell({ children }: { children: ReactNode }) {
             <kbd className="num hidden items-center gap-1 rounded border border-border px-1.5 text-[10px] sm:flex"><Command className="h-3 w-3" />K</kbd>
           </button>
           
-          <span className="ml-auto hidden items-center gap-2 text-xs text-muted-foreground lg:flex">
+          <span className="hidden items-center gap-2 text-xs text-muted-foreground lg:flex">
             <span className="h-2 w-2 animate-pulse rounded-full bg-invest" /> Modo: <span className="font-bold text-primary uppercase">{modo}</span>
           </span>
+
+          {/* User Auth Section (Login / Logout) */}
+          <div className="flex items-center gap-2">
+            {user ? (
+              <div className="flex items-center gap-2 rounded-xl border border-border bg-card/60 px-2.5 py-1.5 text-xs backdrop-blur-md">
+                <div className="flex items-center gap-1.5 text-foreground font-medium truncate max-w-[130px] sm:max-w-[180px]">
+                  <span className="h-2 w-2 rounded-full bg-emerald-400 shrink-0" />
+                  <span className="truncate">{user.email?.split("@")[0] || "Operador"}</span>
+                </div>
+
+                <button
+                  onClick={handleLogout}
+                  className="rounded-lg border border-border/40 p-1 text-muted-foreground hover:bg-destructive/10 hover:text-rose-400 hover:border-destructive/30 transition"
+                  title="Encerrar sessão"
+                >
+                  <LogOut className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ) : (
+              <Link
+                to="/login"
+                className="flex items-center gap-1.5 rounded-xl border border-primary/40 bg-primary/15 px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary/25 transition glow"
+              >
+                <LogIn className="h-3.5 w-3.5" /> Entrar
+              </Link>
+            )}
+          </div>
         </header>
 
         <main className="flex-1 px-4 py-6 md:px-8">{children}</main>
