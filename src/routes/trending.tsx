@@ -40,12 +40,12 @@ export function TrendingPage() {
     return "radar";
   });
 
-  // Sync tab with URL
+  // Sync tab state
   const switchTab = (tab: "radar" | "oportunidades" | "calendario" | "seguindo") => {
     setActiveTab(tab);
-    const url = new URL(window.location.href);
-    url.searchParams.set("aba", tab);
-    window.history.replaceState({}, "", url.toString());
+    if (typeof window !== "undefined" && window.location.search) {
+      window.history.replaceState({}, "", window.location.pathname);
+    }
   };
 
   // Main Topics Data (Persistent localStorage)

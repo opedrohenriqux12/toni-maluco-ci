@@ -33,15 +33,9 @@ export function setCentralModo(modo: CentralModo, aba?: string) {
   if (modo === "gestao") localStorage.setItem("gestao_last_tab", targetAba);
   else localStorage.setItem("operacao_last_tab", targetAba);
 
-  const url = new URL(window.location.href);
-  url.searchParams.set("modo", modo);
-  if (modo === "gestao" && targetAba && targetAba !== "painel") {
-    url.searchParams.set("aba", targetAba);
-  } else {
-    url.searchParams.delete("aba");
+  if (window.location.search) {
+    window.history.replaceState({}, "", window.location.pathname);
   }
-
-  window.history.replaceState({}, "", url.toString());
   window.dispatchEvent(new CustomEvent("central_modo_change", { detail: { modo, aba: targetAba } }));
 }
 
