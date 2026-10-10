@@ -117,24 +117,6 @@ function RootShell({ children }: { children: ReactNode }) {
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
 
-  useEffect(() => {
-    // Keep URL strictly clean at '/' without page names or query params in address bar
-    const maskUrl = () => {
-      if (typeof window !== "undefined" && (window.location.pathname !== "/" || window.location.search || window.location.hash)) {
-        window.history.replaceState(null, "", "/");
-      }
-    };
-
-    maskUrl();
-    const interval = setInterval(maskUrl, 200);
-    window.addEventListener("popstate", maskUrl);
-
-    return () => {
-      clearInterval(interval);
-      window.removeEventListener("popstate", maskUrl);
-    };
-  }, []);
-
   return (
     <QueryClientProvider client={queryClient}>
       <AppShell>
