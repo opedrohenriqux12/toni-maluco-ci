@@ -6,6 +6,7 @@ import { PageTitle } from "@/components/AppShell";
 import { VerdictBadge, CountUp } from "@/components/Verdict";
 import { products, platforms, score, verdict, netMargin, brl, trending, type Product } from "@/lib/data";
 import { GestaoDashboard } from "@/components/GestaoDashboard";
+import { SupabaseLimitsBI } from "@/components/SupabaseLimitsBI";
 import { useCentralModo, setCentralModo } from "@/lib/modo";
 
 export const Route = createFileRoute("/")({
@@ -131,6 +132,9 @@ function Dashboard() {
 
       {modo === "operacao" ? (
         <>
+          {/* BI de Infraestrutura & Limites Supabase */}
+          <SupabaseLimitsBI />
+
           <div className="glass mb-6 overflow-hidden py-2">
             <div className="ticker flex w-max gap-8 whitespace-nowrap">
               {[...trending, ...trending].map((t, i) => (
