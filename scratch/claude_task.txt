@@ -1,0 +1,14 @@
+1. Em src/routes/conselho.tsx e src/routes/conselho.$threadId.tsx:
+- Remova a exigência obrigatória de login para acessar a rota do conselho.
+- Permita criar e visualizar conversas utilizando o Supabase se logado, ou UUIDs/armazenamento local se não houver usuário autenticado.
+
+2. Em src/routes/api/chat.ts:
+- Remova a obrigatoriedade de token de autenticação de usuário no header authorization.
+- Remova a dependência de LOVABLE_API_KEY / Lovable Gateway.
+- Utilize OPENAI_API_KEY se estiver presente nas variáveis de ambiente ou, caso não haja chave configurada, retorne uma resposta simulada do Conselho com streaming/texto amigável de acordo com os conselheiros selecionados para a aplicação continuar 100% funcional sem quebrar.
+
+3. Em src/routes/anuncios.tsx:
+- Transforme a página em uma ferramenta funcional de Geração e Adaptação de Anúncios. O usuário cola um anúncio de referência e clica em 'Gerar Variações', gerando 3 a 5 versões adaptadas para diferentes marketplaces (GGMAX, Mercado Livre, Eneba, Instagram), com título, descrição, palavras-chave e pontos fortes.
+
+4. Em src/routes/scripts.tsx:
+- Transforme a página em um Gerador de Scripts de Venda interativo. Permita selecionar o canal (WhatsApp, GGMAX Chat, Instagram DM), o tom (Amigável, Gamer, Formal, Urgente) e a situação (Abordagem, Objeção, Pós-venda) para gerar scripts em tempo real.
