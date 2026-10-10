@@ -17,6 +17,7 @@ const operacaoNav = [
   { to: "/scripts", label: "Scripts", icon: MessagesSquare },
   { to: "/trending", label: "Trending", icon: TrendingUp },
   { to: "/conselho", label: "Conselho", icon: Users },
+  { to: "/gerenciamento", label: "Gerenciamento", icon: Gauge },
 ] as const;
 
 interface GestaoGroup {

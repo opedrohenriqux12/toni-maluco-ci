@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AnunciosRouteImport } from './routes/anuncios'
 import { Route as CalculadoraRouteImport } from './routes/calculadora'
 import { Route as ConselhoRouteImport } from './routes/conselho'
+import { Route as GerenciamentoRouteImport } from './routes/gerenciamento'
 import { Route as InteligenciaRouteImport } from './routes/inteligencia'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as ScriptsRouteImport } from './routes/scripts'
@@ -41,6 +42,11 @@ const CalculadoraRoute = CalculadoraRouteImport.update({
 const ConselhoRoute = ConselhoRouteImport.update({
   id: '/conselho',
   path: '/conselho',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const GerenciamentoRoute = GerenciamentoRouteImport.update({
+  id: '/gerenciamento',
+  path: '/gerenciamento',
   getParentRoute: () => rootRouteImport,
 } as any)
 const InteligenciaRoute = InteligenciaRouteImport.update({
@@ -94,6 +100,7 @@ export interface FileRoutesByFullPath {
   '/anuncios': typeof AnunciosRoute
   '/calculadora': typeof CalculadoraRoute
   '/conselho': typeof ConselhoRouteWithChildren
+  '/gerenciamento': typeof GerenciamentoRoute
   '/inteligencia': typeof InteligenciaRoute
   '/login': typeof LoginRoute
   '/scripts': typeof ScriptsRoute
@@ -108,6 +115,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/anuncios': typeof AnunciosRoute
   '/calculadora': typeof CalculadoraRoute
+  '/gerenciamento': typeof GerenciamentoRoute
   '/inteligencia': typeof InteligenciaRoute
   '/login': typeof LoginRoute
   '/scripts': typeof ScriptsRoute
@@ -124,6 +132,7 @@ export interface FileRoutesById {
   '/anuncios': typeof AnunciosRoute
   '/calculadora': typeof CalculadoraRoute
   '/conselho': typeof ConselhoRouteWithChildren
+  '/gerenciamento': typeof GerenciamentoRoute
   '/inteligencia': typeof InteligenciaRoute
   '/login': typeof LoginRoute
   '/scripts': typeof ScriptsRoute
@@ -141,6 +150,7 @@ export interface FileRouteTypes {
     | '/anuncios'
     | '/calculadora'
     | '/conselho'
+    | '/gerenciamento'
     | '/inteligencia'
     | '/login'
     | '/scripts'
@@ -155,6 +165,7 @@ export interface FileRouteTypes {
     | '/'
     | '/anuncios'
     | '/calculadora'
+    | '/gerenciamento'
     | '/inteligencia'
     | '/login'
     | '/scripts'
@@ -170,6 +181,7 @@ export interface FileRouteTypes {
     | '/anuncios'
     | '/calculadora'
     | '/conselho'
+    | '/gerenciamento'
     | '/inteligencia'
     | '/login'
     | '/scripts'
@@ -186,6 +198,7 @@ export interface RootRouteChildren {
   AnunciosRoute: typeof AnunciosRoute
   CalculadoraRoute: typeof CalculadoraRoute
   ConselhoRoute: typeof ConselhoRouteWithChildren
+  GerenciamentoRoute: typeof GerenciamentoRoute
   InteligenciaRoute: typeof InteligenciaRoute
   LoginRoute: typeof LoginRoute
   ScriptsRoute: typeof ScriptsRoute
@@ -223,6 +236,13 @@ declare module '@tanstack/react-router' {
       path: '/conselho'
       fullPath: '/conselho'
       preLoaderRoute: typeof ConselhoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/gerenciamento': {
+      id: '/gerenciamento'
+      path: '/gerenciamento'
+      fullPath: '/gerenciamento'
+      preLoaderRoute: typeof GerenciamentoRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/inteligencia': {
@@ -310,6 +330,7 @@ const rootRouteChildren: RootRouteChildren = {
   AnunciosRoute: AnunciosRoute,
   CalculadoraRoute: CalculadoraRoute,
   ConselhoRoute: ConselhoRouteWithChildren,
+  GerenciamentoRoute: GerenciamentoRoute,
   InteligenciaRoute: InteligenciaRoute,
   LoginRoute: LoginRoute,
   ScriptsRoute: ScriptsRoute,
