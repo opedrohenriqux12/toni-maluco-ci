@@ -193,14 +193,15 @@ export function Login() {
   };
 
   return (
-    <div className="mx-auto mt-8 max-w-md px-4">
-      <div className="glass p-7 rounded-2xl border border-border/60 shadow-2xl space-y-6 backdrop-blur-xl">
-        <div className="flex items-center justify-between">
-          <Logo />
-          <span className="flex items-center gap-1.5 text-[10px] font-semibold tracking-wider text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-full border border-emerald-500/20">
-            <ShieldCheck className="h-3.5 w-3.5" /> Blindagem Ativa
-          </span>
-        </div>
+    <div className="flex min-h-screen w-full items-center justify-center bg-background px-4 py-8">
+      <div className="w-full max-w-md space-y-4">
+        <div className="glass p-7 rounded-2xl border border-border/60 shadow-2xl space-y-6 backdrop-blur-xl">
+          <div className="flex items-center justify-between">
+            <Logo />
+            <span className="flex items-center gap-1.5 text-[10px] font-semibold tracking-wider text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-full border border-emerald-500/20">
+              <ShieldCheck className="h-3.5 w-3.5" /> Blindagem Ativa
+            </span>
+          </div>
 
         {/* Mode: MFA Verification Form */}
         {mode === "mfa" ? (
@@ -439,6 +440,7 @@ export function Login() {
       {/* Security Footer Notice */}
       <div className="mt-4 text-center text-[11px] text-muted-foreground flex items-center justify-center gap-1.5">
         <Lock className="h-3 w-3 text-emerald-400" /> Sessões autenticadas utilizam criptografia e políticas RLS de negação padrão.
+      </div>
       </div>
     </div>
   );

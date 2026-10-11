@@ -16,6 +16,7 @@ import { Route as ConselhoRouteImport } from './routes/conselho'
 import { Route as GerenciamentoRouteImport } from './routes/gerenciamento'
 import { Route as InteligenciaRouteImport } from './routes/inteligencia'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as PerfilRouteImport } from './routes/perfil'
 import { Route as ScriptsRouteImport } from './routes/scripts'
 import { Route as TrendingRouteImport } from './routes/trending'
 import { Route as ApiChatRouteImport } from './routes/api/chat'
@@ -57,6 +58,11 @@ const InteligenciaRoute = InteligenciaRouteImport.update({
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PerfilRoute = PerfilRouteImport.update({
+  id: '/perfil',
+  path: '/perfil',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ScriptsRoute = ScriptsRouteImport.update({
@@ -103,6 +109,7 @@ export interface FileRoutesByFullPath {
   '/gerenciamento': typeof GerenciamentoRoute
   '/inteligencia': typeof InteligenciaRoute
   '/login': typeof LoginRoute
+  '/perfil': typeof PerfilRoute
   '/scripts': typeof ScriptsRoute
   '/trending': typeof TrendingRoute
   '/api/chat': typeof ApiChatRoute
@@ -118,6 +125,7 @@ export interface FileRoutesByTo {
   '/gerenciamento': typeof GerenciamentoRoute
   '/inteligencia': typeof InteligenciaRoute
   '/login': typeof LoginRoute
+  '/perfil': typeof PerfilRoute
   '/scripts': typeof ScriptsRoute
   '/trending': typeof TrendingRoute
   '/api/chat': typeof ApiChatRoute
@@ -135,6 +143,7 @@ export interface FileRoutesById {
   '/gerenciamento': typeof GerenciamentoRoute
   '/inteligencia': typeof InteligenciaRoute
   '/login': typeof LoginRoute
+  '/perfil': typeof PerfilRoute
   '/scripts': typeof ScriptsRoute
   '/trending': typeof TrendingRoute
   '/api/chat': typeof ApiChatRoute
@@ -153,6 +162,7 @@ export interface FileRouteTypes {
     | '/gerenciamento'
     | '/inteligencia'
     | '/login'
+    | '/perfil'
     | '/scripts'
     | '/trending'
     | '/api/chat'
@@ -168,6 +178,7 @@ export interface FileRouteTypes {
     | '/gerenciamento'
     | '/inteligencia'
     | '/login'
+    | '/perfil'
     | '/scripts'
     | '/trending'
     | '/api/chat'
@@ -184,6 +195,7 @@ export interface FileRouteTypes {
     | '/gerenciamento'
     | '/inteligencia'
     | '/login'
+    | '/perfil'
     | '/scripts'
     | '/trending'
     | '/api/chat'
@@ -201,6 +213,7 @@ export interface RootRouteChildren {
   GerenciamentoRoute: typeof GerenciamentoRoute
   InteligenciaRoute: typeof InteligenciaRoute
   LoginRoute: typeof LoginRoute
+  PerfilRoute: typeof PerfilRoute
   ScriptsRoute: typeof ScriptsRoute
   TrendingRoute: typeof TrendingRoute
   ApiChatRoute: typeof ApiChatRoute
@@ -257,6 +270,13 @@ declare module '@tanstack/react-router' {
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/perfil': {
+      id: '/perfil'
+      path: '/perfil'
+      fullPath: '/perfil'
+      preLoaderRoute: typeof PerfilRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/scripts': {
@@ -333,6 +353,7 @@ const rootRouteChildren: RootRouteChildren = {
   GerenciamentoRoute: GerenciamentoRoute,
   InteligenciaRoute: InteligenciaRoute,
   LoginRoute: LoginRoute,
+  PerfilRoute: PerfilRoute,
   ScriptsRoute: ScriptsRoute,
   TrendingRoute: TrendingRoute,
   ApiChatRoute: ApiChatRoute,

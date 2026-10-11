@@ -4,6 +4,8 @@ import {
   Link,
   createRootRouteWithContext,
   useRouter,
+  useRouterState,
+  useNavigate,
   HeadContent,
   Scripts,
   type ErrorComponentProps,
@@ -12,7 +14,9 @@ import { useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
-import { AppShell } from "@/components/AppShell";
+import { AppShell, Logo } from "@/components/AppShell";
+import { useAuth } from "@/hooks/useAuth";
+import { Login } from "./login";
 
 function NotFoundComponent() {
   return (
@@ -114,14 +118,60 @@ function RootShell({ children }: { children: ReactNode }) {
   );
 }
 
+function AuthGatekeeper({ children }: { children: ReactNode }) {
+  const { user, loading } = useAuth();
+  const routerState = useRouterState();
+  const navigate = useNavigate();
+  const pathname = routerState.location.pathname;
+
+  useEffect(() => {
+    if (user && pathname === "/login") {
+      navigate({ to: "/conselho" });
+    }
+  }, [user, pathname, navigate]);
+
+  if (loading) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center bg-background px-4">
+        <div className="flex flex-col items-center gap-3">
+          <Logo />
+          <div className="mt-3 h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+          <p className="text-xs text-muted-foreground animate-pulse">Carregando ambiente seguro...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Not authenticated: always render the full-screen standalone Login portal
+  if (!user) {
+    return <Login />;
+  }
+
+  // If authenticated and visiting /login directly, display transition while redirecting
+  if (pathname === "/login") {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center bg-background px-4">
+        <div className="flex flex-col items-center gap-3">
+          <Logo />
+          <div className="mt-3 h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+          <p className="text-xs text-muted-foreground">Redirecionando para o painel...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Authenticated: full platform access wrapped in AppShell
+  return <AppShell>{children}</AppShell>;
+}
+
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
 
   return (
     <QueryClientProvider client={queryClient}>
-      <AppShell>
+      <AuthGatekeeper>
         <Outlet />
-      </AppShell>
+      </AuthGatekeeper>
     </QueryClientProvider>
   );
 }

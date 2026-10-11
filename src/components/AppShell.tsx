@@ -22,6 +22,7 @@ const operacaoNav = [
   { to: "/trending", label: "Trending", icon: TrendingUp },
   { to: "/conselho", label: "Conselho", icon: Users },
   { to: "/gerenciamento", label: "Gerenciamento", icon: Gauge },
+  { to: "/perfil", label: "Perfil", icon: User },
 ] as const;
 
 interface GestaoGroup {
@@ -244,9 +245,32 @@ export function AppShell({ children }: { children: ReactNode }) {
           </nav>
         )}
 
-        <p className="mt-auto pt-6 text-[10px] leading-relaxed text-muted-foreground/80 border-t border-sidebar-border">
-          Análises são estimativas para apoio à decisão, não garantia de resultado nem aconselhamento financeiro, contábil ou jurídico.
-        </p>
+        {/* User Profile Card at bottom of sidebar */}
+        <div className="mt-auto pt-4 border-t border-sidebar-border">
+          {user && (
+            <div className="mb-3 flex items-center justify-between p-2 rounded-xl bg-card/40 border border-border/50">
+              <Link to="/perfil" search={{ modo: "operacao" }} className="flex items-center gap-2 min-w-0 hover:text-primary transition">
+                <div className="h-7 w-7 rounded-full bg-primary/20 border border-primary/40 flex items-center justify-center text-primary shrink-0">
+                  <User className="h-3.5 w-3.5" />
+                </div>
+                <div className="min-w-0 text-left">
+                  <p className="text-xs font-semibold text-foreground truncate">{user.email?.split("@")[0] || "Operador"}</p>
+                  <p className="text-[10px] text-muted-foreground truncate">{user.email || "Autenticado"}</p>
+                </div>
+              </Link>
+              <button
+                onClick={handleLogout}
+                title="Encerrar sessão"
+                className="p-1.5 text-muted-foreground hover:text-rose-400 rounded-lg hover:bg-rose-500/10 transition shrink-0"
+              >
+                <LogOut className="h-4 w-4" />
+              </button>
+            </div>
+          )}
+          <p className="text-[10px] leading-relaxed text-muted-foreground/80">
+            Análises são estimativas para apoio à decisão, não garantia de resultado nem aconselhamento financeiro, contábil ou jurídico.
+          </p>
+        </div>
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col pb-20 md:pb-0">
@@ -269,34 +293,33 @@ export function AppShell({ children }: { children: ReactNode }) {
             <kbd className="num hidden items-center gap-1 rounded border border-border px-1.5 text-[10px] sm:flex"><Command className="h-3 w-3" />K</kbd>
           </button>
           
-          <span className="hidden items-center gap-2 text-xs text-muted-foreground lg:flex">
-            <span className="h-2 w-2 animate-pulse rounded-full bg-invest" /> Modo: <span className="font-bold text-primary uppercase">{modo}</span>
-          </span>
+          <div className="ml-auto flex items-center gap-2.5">
+            <span className="hidden items-center gap-2 text-xs text-muted-foreground lg:flex">
+              <span className="h-2 w-2 animate-pulse rounded-full bg-invest" /> Modo: <span className="font-bold text-primary uppercase">{modo}</span>
+            </span>
 
-          {/* User Auth Section (Login / Logout) */}
-          <div className="flex items-center gap-2">
-            {user ? (
-              <div className="flex items-center gap-2 rounded-xl border border-border bg-card/60 px-2.5 py-1.5 text-xs backdrop-blur-md">
-                <div className="flex items-center gap-1.5 text-foreground font-medium truncate max-w-[130px] sm:max-w-[180px]">
-                  <span className="h-2 w-2 rounded-full bg-emerald-400 shrink-0" />
-                  <span className="truncate">{user.email?.split("@")[0] || "Operador"}</span>
-                </div>
-
+            {user && (
+              <div className="flex items-center gap-2">
+                <Link
+                  to="/perfil"
+                  search={{ modo: "operacao" }}
+                  className="flex items-center gap-1.5 rounded-lg border border-border bg-card/60 px-2.5 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:border-primary/40 transition"
+                  title="Acessar Perfil e Alterar Senha"
+                >
+                  <User className="h-3.5 w-3.5 text-primary" />
+                  <span className="max-w-[100px] truncate font-medium sm:max-w-[150px]">
+                    {user.email?.split("@")[0] || "Operador"}
+                  </span>
+                </Link>
                 <button
                   onClick={handleLogout}
-                  className="rounded-lg border border-border/40 p-1 text-muted-foreground hover:bg-destructive/10 hover:text-rose-400 hover:border-destructive/30 transition"
+                  className="flex items-center gap-1 rounded-lg border border-rose-500/20 bg-rose-500/10 px-2.5 py-1.5 text-xs font-semibold text-rose-400 hover:bg-rose-500/20 transition"
                   title="Encerrar sessão"
                 >
                   <LogOut className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">Sair</span>
                 </button>
               </div>
-            ) : (
-              <Link
-                to="/login"
-                className="flex items-center gap-1.5 rounded-xl border border-primary/40 bg-primary/15 px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary/25 transition glow"
-              >
-                <LogIn className="h-3.5 w-3.5" /> Entrar
-              </Link>
             )}
           </div>
         </header>
