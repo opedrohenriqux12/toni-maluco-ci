@@ -16,7 +16,6 @@ import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { AppShell, Logo } from "@/components/AppShell";
 import { useAuth } from "@/hooks/useAuth";
-import { Login } from "./login";
 
 function NotFoundComponent() {
   return (
@@ -125,42 +124,62 @@ function AuthGatekeeper({ children }: { children: ReactNode }) {
   const pathname = routerState.location.pathname;
 
   useEffect(() => {
-    if (user && pathname === "/login") {
-      navigate({ to: "/conselho" });
+    if (!loading) {
+      if (!user && pathname !== "/login") {
+        navigate({
+          to: "/login",
+          search: pathname && pathname !== "/" ? { redirect: pathname } : {},
+        });
+      } else if (user && pathname === "/login") {
+        navigate({ to: "/conselho" });
+      }
     }
-  }, [user, pathname, navigate]);
+  }, [user, loading, pathname, navigate]);
 
+  // Loading state (validating session)
   if (loading) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-background px-4">
         <div className="flex flex-col items-center gap-3">
           <Logo />
           <div className="mt-3 h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-          <p className="text-xs text-muted-foreground animate-pulse">Carregando ambiente seguro...</p>
+          <p className="text-xs text-muted-foreground animate-pulse">Validando credenciais...</p>
         </div>
       </div>
     );
   }
 
-  // Not authenticated: always render the full-screen standalone Login portal
-  if (!user) {
-    return <Login />;
+  // On login route:
+  if (pathname === "/login") {
+    if (user) {
+      return (
+        <div className="flex min-h-screen flex-col items-center justify-center bg-background px-4">
+          <div className="flex flex-col items-center gap-3">
+            <Logo />
+            <div className="mt-3 h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+            <p className="text-xs text-muted-foreground">Redirecionando para o painel...</p>
+          </div>
+        </div>
+      );
+    }
+    // Render full-screen login standalone without AppShell
+    return <>{children}</>;
   }
 
-  // If authenticated and visiting /login directly, display transition while redirecting
-  if (pathname === "/login") {
+  // Not logged in and accessing protected route: redirecting
+  if (!user) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-background px-4">
         <div className="flex flex-col items-center gap-3">
           <Logo />
           <div className="mt-3 h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-          <p className="text-xs text-muted-foreground">Redirecionando para o painel...</p>
+          <p className="text-xs text-muted-foreground animate-pulse">Acesso restrito. Redirecionando para login...</p>
         </div>
       </div>
     );
   }
 
-  // Authenticated: full platform access wrapped in AppShell
+  // Authenticated and on protected route: render inside AppShell
   return <AppShell>{children}</AppShell>;
 }
 
