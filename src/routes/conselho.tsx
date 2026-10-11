@@ -9,6 +9,8 @@ import { createFileRoute, Link, Outlet, useNavigate } from "@tanstack/react-rout
   import { advisors } from "@/lib/data";
   import { generateUUID } from "@/lib/uuid";
 
+import { getProjects, getSavedSessions, type ProjectFolder, type SavedSession } from "@/lib/projectStore";
+
 export const Route = createFileRoute("/conselho")({
   head: () => ({
     meta: [
@@ -29,8 +31,10 @@ function ConsiglioLayout() {
   const { user, loading } = useAuth();
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const [localThreads, setLocalThreads] = useState<Array<{ id: string; title: string; updated_at: string }>>([]);
+  const [localThreads, setLocalThreads] = useState<Array<{ id: string; title: string; updated_at: string; projectId?: string | undefined }>>([]);
   const [activeAdvisors, setActiveAdvisors] = useState<Set<string>>(new Set(advisors.map((a) => a.id)));
+  const [projects, setProjects] = useState<ProjectFolder[]>(() => getProjects());
+  const [selectedFolderFilter, setSelectedFolderFilter] = useState<string | null>(null);
 
   const toggleAdvisor = (id: string) => {
     setActiveAdvisors((prev) => {
@@ -41,18 +45,30 @@ function ConsiglioLayout() {
     });
   };
 
-  // Load threads from localStorage if no user
-  useEffect(() => {
-    if (!user) {
-      const stored = localStorage.getItem("council_threads");
-      if (stored) {
-        try {
-          setLocalThreads(JSON.parse(stored));
-        } catch {
-          setLocalThreads([]);
-        }
-      }
+  // Carrega threads do localStorage / projectStore
+  const loadStoredThreads = () => {
+    setProjects(getProjects());
+    const saved = getSavedSessions("conselho");
+    const stored = localStorage.getItem("council_threads");
+    let baseList: Array<{ id: string; title: string; updated_at: string; projectId?: string }> = [];
+
+    if (stored) {
+      try {
+        baseList = JSON.parse(stored);
+      } catch {}
     }
+
+    // Merge com saved sessions para pegar os projectIds corretos
+    const merged = baseList.map((t) => {
+      const match = saved.find((s) => s.id === t.id);
+      return match ? { ...t, projectId: match.projectId } : t;
+    });
+
+    setLocalThreads(merged);
+  };
+
+  useEffect(() => {
+    loadStoredThreads();
   }, [user]);
 
   // Save threads to localStorage when they change (if no user)
@@ -66,13 +82,22 @@ function ConsiglioLayout() {
     queryKey: threadsKey,
     enabled: !!user,
     queryFn: async () => {
-      const { data, error } = await supabase.from("council_threads").select("id, title, updated_at").order("updated_at", { ascending: false });
-      if (error) throw error;
-      return data;
+      try {
+        const { data, error } = await supabase.from("council_threads").select("id, title, updated_at").order("updated_at", { ascending: false });
+        if (!error && data) return data;
+      } catch (e) {
+        console.warn("Supabase threads fetch error", e);
+      }
+      return localThreads;
     },
   });
 
-  const threads = user ? threadsQuery.data ?? [] : localThreads;
+  const allThreads = user ? (threadsQuery.data ?? localThreads) : localThreads;
+  const filteredThreads = selectedFolderFilter === null
+    ? allThreads
+    : selectedFolderFilter === "avulso"
+      ? allThreads.filter((t: any) => !t.projectId)
+      : allThreads.filter((t: any) => t.projectId === selectedFolderFilter);
 
   const newThread = async () => {
     try {
@@ -154,24 +179,84 @@ function ConsiglioLayout() {
           <button onClick={newThread} className="mb-3 flex items-center justify-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition hover:brightness-110">
             <MessageSquarePlus className="h-4 w-4" /> Nova conversa
           </button>
-          <p className="num mb-2 px-1 text-[11px] uppercase tracking-widest text-muted-foreground">Conversas</p>
+
+          {/* Filtro por Pastas / Projetos */}
+          <div className="mb-2">
+            <div className="flex items-center justify-between px-1 mb-1.5">
+              <span className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground">Projetos & Pastas</span>
+            </div>
+            <div className="flex flex-wrap gap-1 mb-2">
+              <button
+                onClick={() => setSelectedFolderFilter(null)}
+                className={`px-2 py-0.5 rounded text-[11px] font-medium transition ${
+                  selectedFolderFilter === null
+                    ? "bg-primary text-primary-foreground font-semibold"
+                    : "bg-muted/60 text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                Todos ({allThreads.length})
+              </button>
+              {projects.map((p) => {
+                const count = allThreads.filter((t: any) => t.projectId === p.id).length;
+                return (
+                  <button
+                    key={p.id}
+                    onClick={() => setSelectedFolderFilter(p.id)}
+                    className={`px-2 py-0.5 rounded text-[11px] font-medium transition ${
+                      selectedFolderFilter === p.id
+                        ? "bg-primary text-primary-foreground font-semibold"
+                        : "bg-muted/60 text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    📁 {p.name} ({count})
+                  </button>
+                );
+              })}
+              <button
+                onClick={() => setSelectedFolderFilter("avulso")}
+                className={`px-2 py-0.5 rounded text-[11px] font-medium transition ${
+                  selectedFolderFilter === "avulso"
+                    ? "bg-primary text-primary-foreground font-semibold"
+                    : "bg-muted/60 text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                Avulsas ({allThreads.filter((t: any) => !t.projectId).length})
+              </button>
+            </div>
+          </div>
+
+          <p className="num mb-2 px-1 text-[11px] uppercase tracking-widest text-muted-foreground">Conversas Registradas</p>
           <div className="flex-1 space-y-1 overflow-y-auto">
-            {threads.length === 0 && <p className="px-1 text-xs text-muted-foreground">Nenhuma ainda.</p>}
-            {threads.map((t) => (
-              <div key={t.id} className="group flex items-center rounded-lg hover:bg-accent">
-                <Link
-                  to="/conselho/$threadId"
-                  params={{ threadId: t.id }}
-                  className="min-w-0 flex-1 truncate px-2 py-1.5 text-sm text-muted-foreground"
-                  activeProps={{ className: "text-primary font-medium" }}
-                >
-                  {t.title}
-                </Link>
-                <button onClick={() => remove(t.id)} aria-label="Apagar conversa" className="p-1.5 text-muted-foreground opacity-0 transition hover:text-destructive group-hover:opacity-100">
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            ))}
+            {filteredThreads.length === 0 && (
+              <p className="px-1 text-xs text-muted-foreground italic">Nenhuma conversa encontrada nesta pasta.</p>
+            )}
+            {filteredThreads.map((t: any) => {
+              const matchedProj = projects.find((p) => p.id === t.projectId);
+              return (
+                <div key={t.id} className="group flex items-center justify-between rounded-lg hover:bg-accent px-1.5 py-1">
+                  <Link
+                    to="/conselho/$threadId"
+                    params={{ threadId: t.id }}
+                    className="min-w-0 flex-1 truncate text-xs text-muted-foreground"
+                    activeProps={{ className: "text-primary font-semibold" }}
+                  >
+                    <div className="truncate font-medium">{t.title}</div>
+                    {matchedProj && (
+                      <span className="text-[10px] text-primary/80 font-mono">
+                        📁 {matchedProj.name}
+                      </span>
+                    )}
+                  </Link>
+                  <button
+                    onClick={() => remove(t.id)}
+                    aria-label="Apagar conversa"
+                    className="p-1 text-muted-foreground opacity-0 transition hover:text-destructive group-hover:opacity-100"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              );
+            })}
           </div>
           {user && (
             <button onClick={() => supabase.auth.signOut()} className="mt-3 flex items-center gap-2 px-1 text-xs text-muted-foreground hover:text-foreground">

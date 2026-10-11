@@ -84,36 +84,120 @@ export const Route = createFileRoute("/api/chat")({
           }
         }
 
-        // Check for OpenAI API key
-        const apiKey = process.env["OPENAI_API_KEY"];
-        if (apiKey) {
+        // Engine de Inteligência Artificial do Conselho:
+        // 1. NVIDIA NIM (Nemotron 30B) se disponível
+        // 2. OpenRouter (DeepSeek R1 / Grátis)
+        // 3. OpenAI (se chave fornecida)
+        // 4. Simulação rica local
+        const nvidiaKey = process.env["NVIDIA_API_KEY"];
+        const openRouterKey = process.env["OPENROUTER_API_KEY"];
+        const openAiKey = process.env["OPENAI_API_KEY"];
+
+        const lastMsg = messages[messages.length - 1];
+        const lastTextMsg = lastMsg ? lastMsg.parts.map((p) => (p.type === "text" ? p.text : "")).join(" ") : "";
+        const promptInstruction = buildCouncilPrompt(lastTextMsg, body.mode ?? "geral", body.active ?? []);
+
+        // 1. NVIDIA NIM
+        if (nvidiaKey) {
+          try {
+            const nvidiaRes = await fetch("https://integrate.api.nvidia.com/v1/chat/completions", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${nvidiaKey.trim()}`,
+                "Accept": "application/json",
+              },
+              body: JSON.stringify({
+                model: "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+                messages: [
+                  { role: "system", content: promptInstruction },
+                  ...messages.slice(-6).map((m) => ({
+                    role: m.role === "assistant" ? "assistant" : "user",
+                    content: m.parts.map((p) => (p.type === "text" ? p.text : "")).join(" "),
+                  })),
+                ],
+                max_tokens: 4096,
+                reasoning_budget: 1024,
+                temperature: 0.6,
+                top_p: 0.95,
+                stream: false,
+              }),
+            });
+
+            if (nvidiaRes.ok) {
+              const nData = await nvidiaRes.json();
+              const reply = nData.choices?.[0]?.message?.content || "[Sem resposta gerada pelo conselho]";
+
+              const stream = new ReadableStream({
+                async start(controller) {
+                  const chunkSize = 25;
+                  for (let i = 0; i < reply.length; i += chunkSize) {
+                    const chunk = reply.slice(i, i + chunkSize);
+                    const messageChunk = {
+                      id: generateUUID(),
+                      role: "assistant",
+                      content: chunk,
+                      parts: [{ type: "text", text: chunk }],
+                    };
+                    controller.enqueue(new TextEncoder().encode(JSON.stringify(messageChunk) + "\n"));
+                    await new Promise((r) => setTimeout(r, 20));
+                  }
+                  controller.close();
+                },
+              });
+
+              return new Response(stream, {
+                headers: {
+                  "Content-Type": "text/plain; charset=utf-8",
+                  "X-Provider-Used": "nvidia-nim",
+                },
+              });
+            }
+          } catch (e) {
+            console.error("NVIDIA NIM council error", e);
+          }
+        }
+
+        // 2. OpenRouter (DeepSeek R1 / Free)
+        if (openRouterKey) {
           const provider = createOpenAI({
-            apiKey,
+            apiKey: openRouterKey,
+            baseURL: "https://openrouter.ai/api/v1",
           });
 
-          const lastMsg = messages[messages.length - 1];
-          const lastTextMsg = lastMsg ? lastMsg.parts.map((p) => (p.type === "text" ? p.text : "")).join(" ") : "";
-
           const result = streamText({
-            model: provider("gpt-4o-mini"),
-            instructions: buildCouncilPrompt(lastTextMsg, body.mode ?? "geral", body.active ?? []),
+            model: provider("deepseek/deepseek-r1:free"),
+            instructions: promptInstruction,
             messages: await convertToModelMessages(messages),
             abortSignal: request.signal,
           });
 
           return result.toUIMessageStreamResponse({
             originalMessages: messages,
-            onError: (err) => {
-              console.error("council stream error", err);
-              return "O Conselho não conseguiu responder agora. Tente novamente.";
-            },
           });
-        } else {
-          // Simulated response as a stream
-          const lastMsg = messages[messages.length - 1];
-          const lastTextMsg = lastMsg ? lastMsg.parts.map((p) => (p.type === "text" ? p.text : "")).join(" ") : "";
-          const activeAdvisors = advisors.filter((a) => body.active?.includes(a.id) ?? false);
-          let simulatedResponse = "";
+        }
+
+        // 3. OpenAI
+        if (openAiKey) {
+          const provider = createOpenAI({
+            apiKey: openAiKey,
+          });
+
+          const result = streamText({
+            model: provider("gpt-4o-mini"),
+            instructions: promptInstruction,
+            messages: await convertToModelMessages(messages),
+            abortSignal: request.signal,
+          });
+
+          return result.toUIMessageStreamResponse({
+            originalMessages: messages,
+          });
+        }
+
+        // 4. Simulação rica local
+        const activeAdvisors = advisors.filter((a) => body.active?.includes(a.id) ?? false);
+        let simulatedResponse = "";
           if (activeAdvisors.length === 0) {
             simulatedResponse = `Como um conselho simulado, recebi sua mensagem: "${lastTextMsg}". Sem conselheiros específicos selecionados, ofereço uma reflexão geral: considere o contexto, seus objetivos e os possíveis impactos de suas decisões.`;
           } else {
@@ -171,7 +255,6 @@ export const Route = createFileRoute("/api/chat")({
               "Content-Type": "text/plain; charset=utf-8",
             },
           });
-        }
       },
     },
   },

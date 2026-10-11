@@ -3,11 +3,13 @@ import { PageTitle } from "@/components/AppShell";
 import { useState, useRef, useEffect } from "react";
 import { 
   Terminal as TerminalIcon, Play, Copy, Check, Trash2, Cpu, 
-  ShieldCheck, RefreshCw, Sparkles, Layers, ArrowRight, CornerDownLeft
+  ShieldCheck, RefreshCw, Sparkles, Layers, ArrowRight, CornerDownLeft,
+  Folder, FolderPlus, Save, Bookmark
 } from "lucide-react";
 import { toast } from "sonner";
 import { recordAiCall, getTelemetryData } from "@/lib/telemetryStore";
 import { virtualOS, type VirtualFile } from "@/lib/virtualOS";
+import { getProjects, saveOrUpdateSession, getSavedSessions, createProject, type ProjectFolder, type SavedSession } from "@/lib/projectStore";
 
 export const Route = createFileRoute("/terminal")({
   head: () => ({
@@ -66,6 +68,14 @@ export function TerminalPage() {
       creditsRemaining: 958,
     },
   });
+
+  // Projetos & Sessões Salvas do Terminal
+  const [projects, setProjects] = useState<ProjectFolder[]>(() => getProjects());
+  const [selectedProjectId, setSelectedProjectId] = useState<string>("");
+  const [savedTerminalSessions, setSavedTerminalSessions] = useState<SavedSession[]>(() => getSavedSessions("terminal"));
+  const [showNewProjModal, setShowNewProjModal] = useState(false);
+  const [newProjName, setNewProjName] = useState("");
+  const [currentSessionId, setCurrentSessionId] = useState<string>(() => `term-${Date.now()}`);
 
   const terminalEndRef = useRef<HTMLDivElement>(null);
 
@@ -278,14 +288,59 @@ export function TerminalPage() {
           Ambiente de execução de comandos e criação de automações com chaves de IA protegidas no backend.
         </PageTitle>
 
-        {/* Telemetria do Provedor Conectado */}
+        {/* Telemetria e Controles de Projeto / Registro */}
         <div className="flex flex-wrap items-center gap-2">
-          <div className="flex items-center gap-2 rounded-xl bg-card/60 border border-border/50 px-3.5 py-1.5 text-xs">
+          {/* Seletor de Projeto / Pasta */}
+          <div className="flex items-center gap-1.5 rounded-xl bg-card/60 border border-border/50 px-3 py-1.5 text-xs">
+            <Folder className="h-3.5 w-3.5 text-primary" />
+            <select
+              value={selectedProjectId}
+              onChange={(e) => setSelectedProjectId(e.target.value)}
+              className="bg-transparent text-xs text-foreground outline-none font-medium cursor-pointer"
+            >
+              <option value="" className="bg-zinc-900 text-zinc-300">Sem pasta (Avulso)</option>
+              {projects.map((p) => (
+                <option key={p.id} value={p.id} className="bg-zinc-900 text-zinc-300">
+                  📁 {p.name}
+                </option>
+              ))}
+            </select>
+            <button
+              onClick={() => setShowNewProjModal(true)}
+              className="p-1 hover:text-primary transition"
+              title="Nova pasta de projeto"
+            >
+              <FolderPlus className="h-3.5 w-3.5" />
+            </button>
+          </div>
+
+          {/* Botão de Salvar Sessão do Terminal */}
+          <button
+            onClick={() => {
+              const snippet = outputs.slice(-1)[0]?.command || "Sessão Terminal";
+              saveOrUpdateSession({
+                id: currentSessionId,
+                type: "terminal",
+                title: snippet.slice(0, 45),
+                projectId: selectedProjectId || undefined,
+                createdAt: new Date().toISOString(),
+                data: outputs,
+              });
+              setSavedTerminalSessions(getSavedSessions("terminal"));
+              toast.success("Sessão do Terminal registrada no projeto com sucesso!");
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary/20 hover:bg-primary/30 border border-primary/40 text-primary text-xs font-semibold transition"
+            title="Salvar comandos e respostas desta sessão"
+          >
+            <Save className="h-3.5 w-3.5" />
+            <span>Salvar Sessão</span>
+          </button>
+
+          <div className="flex items-center gap-2 rounded-xl bg-card/60 border border-border/50 px-3 py-1.5 text-xs">
             <Cpu className="h-3.5 w-3.5 text-primary" />
-            <span className="text-muted-foreground">Motor:</span>
             <span className="font-semibold text-foreground">{providerInfo.activeProvider}</span>
             <span className="flex items-center gap-1 text-[10px] bg-emerald-500/10 text-emerald-400 px-1.5 py-0.2 rounded border border-emerald-500/20">
-              <ShieldCheck className="h-3 w-3" /> Seguro (Zero Leaks)
+              <ShieldCheck className="h-3 w-3" /> Seguro
             </span>
           </div>
 
@@ -298,6 +353,55 @@ export function TerminalPage() {
           </button>
         </div>
       </div>
+
+      {/* Modal Rápido de Criação de Projeto */}
+      {showNewProjModal && (
+        <div className="p-3 bg-zinc-900/95 border border-primary/40 rounded-xl flex items-center justify-between gap-3 text-xs shadow-xl animate-in fade-in">
+          <div className="flex items-center gap-2 flex-1">
+            <FolderPlus className="h-4 w-4 text-primary shrink-0" />
+            <input
+              type="text"
+              value={newProjName}
+              onChange={(e) => setNewProjName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && newProjName.trim()) {
+                  const created = createProject(newProjName);
+                  setProjects(getProjects());
+                  setSelectedProjectId(created.id);
+                  setNewProjName("");
+                  setShowNewProjModal(false);
+                  toast.success(`Pasta de Projeto '${created.name}' criada!`);
+                }
+              }}
+              placeholder="Nome da nova pasta de projeto (ex: Automações Mercado Livre)..."
+              className="bg-zinc-800 px-3 py-1.5 rounded-lg text-foreground outline-none flex-1 font-mono text-xs border border-zinc-700"
+              autoFocus
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                if (!newProjName.trim()) return;
+                const created = createProject(newProjName);
+                setProjects(getProjects());
+                setSelectedProjectId(created.id);
+                setNewProjName("");
+                setShowNewProjModal(false);
+                toast.success(`Pasta de Projeto '${created.name}' criada!`);
+              }}
+              className="px-3 py-1.5 bg-primary text-primary-foreground font-semibold rounded-lg hover:brightness-110 transition"
+            >
+              Criar Pasta
+            </button>
+            <button
+              onClick={() => setShowNewProjModal(false)}
+              className="px-2.5 py-1.5 text-zinc-400 hover:text-zinc-200 transition"
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Terminal Container */}
       <div className="rounded-2xl border border-border/80 bg-zinc-950 shadow-2xl overflow-hidden font-mono text-xs flex flex-col min-h-[580px]">

@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Swords, User, Users } from "lucide-react";
+import { Swords, User, Users, Folder, FolderPlus, Save, Check } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { advisors, route } from "@/lib/data";
@@ -13,8 +13,9 @@ import { Message, MessageContent, MessageResponse } from "@/components/ai-elemen
 import { PromptInput, PromptInputFooter, PromptInputSubmit, PromptInputTextarea } from "@/components/ai-elements/prompt-input";
 import { Shimmer } from "@/components/ai-elements/shimmer";
 import { threadsKey } from "./conselho";
-  import { generateUUID } from "@/lib/uuid";
-  import { useAuth } from "@/hooks/useAuth";
+import { generateUUID } from "@/lib/uuid";
+import { useAuth } from "@/hooks/useAuth";
+import { getProjects, saveOrUpdateSession, getSavedSessions, createProject, type ProjectFolder } from "@/lib/projectStore";
 
 export const Route = createFileRoute("/conselho/$threadId")({
   component: ThreadPage,
@@ -24,37 +25,41 @@ function ThreadPage() {
   const { threadId } = Route.useParams();
   const { user, loading: userLoading } = useAuth();
 
-  // Load messages from Supabase if user exists, else from localStorage
+  // Load messages from Supabase if user exists, else from localStorage with auto-fallback
   const history = useQuery({
     queryKey: ["council-messages", threadId],
     queryFn: async () => {
       if (user) {
-        const { data, error } = await supabase
-          .from("council_messages")
-          .select("sdk_id, role, parts")
-          .eq("thread_id", threadId)
-          .order("created_at", { ascending: true });
-        if (error) throw error;
-        return data.map((m) => ({ id: m.sdk_id, role: m.role as UIMessage["role"], parts: m.parts as UIMessage["parts"] }));
-      } else {
-        const stored = localStorage.getItem(`council_messages_${threadId}`);
-        if (stored) {
-          try {
-            return JSON.parse(stored);
-          } catch {
-            return [];
+        try {
+          const { data, error } = await supabase
+            .from("council_messages")
+            .select("sdk_id, role, parts")
+            .eq("thread_id", threadId)
+            .order("created_at", { ascending: true });
+          if (!error && data) {
+            return data.map((m) => ({ id: m.sdk_id, role: m.role as UIMessage["role"], parts: m.parts as UIMessage["parts"] }));
           }
+        } catch (e) {
+          console.warn("Supabase council_messages unavailable, falling back to local storage", e);
         }
-        return [];
       }
+
+      // Fallback local robusto
+      const stored = localStorage.getItem(`council_messages_${threadId}`);
+      if (stored) {
+        try {
+          return JSON.parse(stored);
+        } catch {
+          return [];
+        }
+      }
+      return [];
     },
-    enabled: !userLoading, // Only run after we know the user status
-    staleTime: Infinity,
-    gcTime: 0,
+    enabled: !userLoading,
+    staleTime: 5000,
   });
 
-  if (history.isLoading) return <div className="glass grid min-h-[520px] place-items-center text-sm text-muted-foreground">Carregando conversa…</div>;
-  if (history.error) return <div className="glass grid min-h-[520px] place-items-center text-sm text-destructive">Não foi possível carregar esta conversa.</div>;
+  if (history.isLoading) return <div className="glass grid min-h-[520px] place-items-center text-sm text-muted-foreground animate-pulse">Carregando conversa…</div>;
 
   return <ChatWindow key={threadId} threadId={threadId} user={user} initial={history.data ?? []} />;
 }
@@ -65,6 +70,15 @@ function ChatWindow({ threadId, user, initial }: { threadId: string; user: any |
   const [active, setActive] = useState<Set<string>>(new Set(advisors.map((a) => a.id)));
   const [text, setText] = useState("");
   const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  // Projetos & Pastas
+  const [projects, setProjects] = useState<ProjectFolder[]>(() => getProjects());
+  const [selectedProject, setSelectedProject] = useState<string>(() => {
+    const existing = getSavedSessions("conselho").find((s) => s.id === threadId);
+    return existing?.projectId || "";
+  });
+  const [showNewProjModal, setShowNewProjModal] = useState(false);
+  const [newProjName, setNewProjName] = useState("");
 
   const transport = useMemo(
     () =>
@@ -160,15 +174,118 @@ function ChatWindow({ threadId, user, initial }: { threadId: string; user: any |
     inputRef.current?.focus();
   };
 
+  const handleSaveToProject = (projId?: string) => {
+    setSelectedProject(projId || "");
+    const title = messages[0]?.parts.map((p) => (p.type === "text" ? p.text : "")).join(" ").slice(0, 50) || "Conversa do Conselho";
+    saveOrUpdateSession({
+      id: threadId,
+      type: "conselho",
+      title,
+      projectId: projId || undefined,
+      createdAt: new Date().toISOString(),
+      data: messages,
+    });
+    toast.success(projId ? "Conversa associada ao Projeto com sucesso!" : "Conversa salva como Avulsa.");
+  };
+
+  const handleCreateProject = () => {
+    if (!newProjName.trim()) return;
+    const created = createProject(newProjName);
+    setProjects(getProjects());
+    handleSaveToProject(created.id);
+    setNewProjName("");
+    setShowNewProjModal(false);
+  };
+
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-center gap-2">
-        {([["geral", "Sala geral", Users], ["individual", "Individual", User], ["war", "War Room", Swords]] as const).map(([id, label, Icon]) => (
-          <button key={id} onClick={() => setMode(id)} className={`flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm transition ${mode === id ? "border-primary/50 bg-primary/10 text-primary" : "border-border text-muted-foreground hover:text-foreground"}`}>
-            <Icon className="h-4 w-4" /> {label}
+      {/* Barra de Modos + Seleção de Projeto/Pasta */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        {/* Modos: Sala Geral, Individual, War Room */}
+        <div className="flex flex-wrap items-center gap-2">
+          {([["geral", "Sala geral", Users], ["individual", "Individual", User], ["war", "War Room", Swords]] as const).map(([id, label, Icon]) => (
+            <button
+              key={id}
+              onClick={() => setMode(id)}
+              className={`flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs sm:text-sm font-medium transition ${
+                mode === id
+                  ? "border-primary/60 bg-primary/10 text-primary shadow-sm"
+                  : "border-border text-muted-foreground hover:text-foreground hover:bg-card/40"
+              }`}
+            >
+              <Icon className="h-4 w-4" /> {label}
+            </button>
+          ))}
+        </div>
+
+        {/* Pasta / Projeto da Conversa */}
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 bg-card/60 border border-border/60 rounded-xl px-2.5 py-1 text-xs">
+            <Folder className="h-3.5 w-3.5 text-primary" />
+            <select
+              value={selectedProject}
+              onChange={(e) => handleSaveToProject(e.target.value)}
+              className="bg-transparent text-xs text-foreground outline-none font-medium cursor-pointer"
+            >
+              <option value="" className="bg-zinc-900 text-zinc-300">Sem pasta (Avulsa)</option>
+              {projects.map((p) => (
+                <option key={p.id} value={p.id} className="bg-zinc-900 text-zinc-300">
+                  📁 {p.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <button
+            onClick={() => setShowNewProjModal(true)}
+            className="p-1.5 rounded-lg border border-border bg-card/40 text-muted-foreground hover:text-foreground transition"
+            title="Criar nova pasta de projeto"
+          >
+            <FolderPlus className="h-3.5 w-3.5" />
           </button>
-        ))}
+
+          <button
+            onClick={() => handleSaveToProject(selectedProject)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary/20 hover:bg-primary/30 border border-primary/40 text-primary text-xs font-semibold transition"
+            title="Salvar conversa"
+          >
+            <Save className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Salvar</span>
+          </button>
+        </div>
       </div>
+
+      {/* Modal Rápido de Criação de Projeto */}
+      {showNewProjModal && (
+        <div className="p-3 bg-zinc-900/95 border border-primary/40 rounded-xl flex items-center justify-between gap-3 text-xs shadow-xl animate-in fade-in">
+          <div className="flex items-center gap-2 flex-1">
+            <FolderPlus className="h-4 w-4 text-primary shrink-0" />
+            <input
+              type="text"
+              value={newProjName}
+              onChange={(e) => setNewProjName(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleCreateProject()}
+              placeholder="Nome da nova pasta de projeto (ex: Operação GGMAX)..."
+              className="bg-zinc-800 px-3 py-1.5 rounded-lg text-foreground outline-none flex-1 font-mono text-xs border border-zinc-700"
+              autoFocus
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleCreateProject}
+              className="px-3 py-1.5 bg-primary text-primary-foreground font-semibold rounded-lg hover:brightness-110 transition"
+            >
+              Criar e Salvar
+            </button>
+            <button
+              onClick={() => setShowNewProjModal(false)}
+              className="px-2.5 py-1.5 text-zinc-400 hover:text-zinc-200 transition"
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="glass flex h-[600px] flex-col">
         <Conversation className="flex-1">
