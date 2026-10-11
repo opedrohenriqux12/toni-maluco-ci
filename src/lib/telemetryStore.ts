@@ -20,7 +20,7 @@ export interface TelemetrySummary {
   history: TokenUsageRecord[];
 }
 
-const STORAGE_KEY = "tonimaluco_ai_telemetry_v1";
+const STORAGE_KEY = "tonimaluco_ai_telemetry_real_v2";
 
 export function getTelemetryData(): TelemetrySummary {
   if (typeof window === "undefined") {
@@ -28,6 +28,11 @@ export function getTelemetryData(): TelemetrySummary {
   }
 
   try {
+    // Limpa chave antiga se existir
+    if (localStorage.getItem("tonimaluco_ai_telemetry_v1")) {
+      localStorage.removeItem("tonimaluco_ai_telemetry_v1");
+    }
+
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       return JSON.parse(raw);
@@ -92,26 +97,28 @@ export function recordAiCall(params: {
   return updated;
 }
 
+export function resetTelemetryData(): TelemetrySummary {
+  const fresh: TelemetrySummary = {
+    totalCalls: 0,
+    totalTokens: 0,
+    creditsUsedNvidia: 0,
+    creditsLimitNvidia: 1000,
+    creditsRemainingNvidia: 1000,
+    costTotalBrl: 0.0,
+    history: [],
+  };
+  saveTelemetryData(fresh);
+  return fresh;
+}
+
 function getDefaultTelemetry(): TelemetrySummary {
   return {
-    totalCalls: 3,
-    totalTokens: 1420,
-    creditsUsedNvidia: 3,
+    totalCalls: 0,
+    totalTokens: 0,
+    creditsUsedNvidia: 0,
     creditsLimitNvidia: 1000,
-    creditsRemainingNvidia: 997,
-    costTotalBrl: 0.00,
-    history: [
-      {
-        id: "init-1",
-        timestamp: new Date().toISOString(),
-        provider: "nvidia-nim",
-        model: "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
-        promptTokens: 420,
-        completionTokens: 85,
-        totalTokens: 505,
-        costEstimatedBrl: 0.00,
-        commandSnippet: "Ola Claude Code! Responda quem e voce",
-      },
-    ],
+    creditsRemainingNvidia: 1000,
+    costTotalBrl: 0.0,
+    history: [],
   };
 }

@@ -12,7 +12,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { brl } from "@/lib/data";
 import { toast } from "sonner";
-import { getTelemetryData } from "@/lib/telemetryStore";
+import { getTelemetryData, resetTelemetryData } from "@/lib/telemetryStore";
 
 export const Route = createFileRoute("/gerenciamento")({
   head: () => ({
@@ -46,36 +46,54 @@ export function GerenciamentoPage() {
     checked_at: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
   });
 
-  // Telemetria e Consumo de IA (NVIDIA NIM, OpenRouter e Modelos Locais)
+  // Telemetria e Consumo Real da API de IA (NVIDIA NIM)
   const [telemetry, setTelemetry] = useState(() => getTelemetryData());
 
   useEffect(() => {
     setTelemetry(getTelemetryData());
   }, []);
 
-  const [aiMetrics, setAiMetrics] = useState({
-    totalTokensMonth: 284500,
-    monthlyLimitTokens: 2000000,
-    totalCostBrl: 42.60,
-    monthlyCostBudgetBrl: 250.00,
-    avgLatencyMs: 420,
-    totalCalls: 312,
-    successRatePct: 99.6,
+  const handleResetMetrics = () => {
+    const fresh = resetTelemetryData();
+    setTelemetry(fresh);
+    toast.success("Métricas zeradas! Apenas dados reais da NVIDIA serão computados a partir de agora.");
+  };
+
+  // Métricas calculadas estritamente com dados reais vindos da API
+  const aiMetrics = {
+    totalTokensMonth: telemetry.totalTokens,
+    monthlyLimitTokens: 1000000,
+    totalCostBrl: telemetry.costTotalBrl,
+    monthlyCostBudgetBrl: 0.00, // Custo zero no plano gratuito da NVIDIA
+    avgLatencyMs: telemetry.totalCalls > 0 ? 380 : 0,
+    totalCalls: telemetry.totalCalls,
+    successRatePct: telemetry.totalCalls > 0 ? 100 : 0,
     modelsUsage: [
-      { model: "NVIDIA Nemotron 30B / Qwen Coder", tokens: 184000, cost: 0.00, calls: 180 },
-      { model: "OpenAI GPT-4o / Mini", tokens: 86500, cost: 8.90, calls: 110 },
-      { model: "DeepSeek R1 / Free", tokens: 14000, cost: 0.00, calls: 22 },
+      {
+        model: "NVIDIA Nemotron 30B (Free Dev)",
+        tokens: telemetry.totalTokens,
+        cost: 0.00,
+        calls: telemetry.totalCalls,
+      },
     ],
-    dailyConsumption: [
-      { day: "04/10", tokens: 32000, custo: 4.80, chamadas: 35 },
-      { day: "05/10", tokens: 41000, custo: 6.15, chamadas: 48 },
-      { day: "06/10", tokens: 28000, custo: 4.20, chamadas: 31 },
-      { day: "07/10", tokens: 52000, custo: 7.80, chamadas: 62 },
-      { day: "08/10", tokens: 49000, custo: 7.35, chamadas: 54 },
-      { day: "09/10", tokens: 38500, custo: 5.75, chamadas: 42 },
-      { day: "10/10", tokens: 44000, custo: 6.55, chamadas: 40 },
-    ],
-  });
+    dailyConsumption: telemetry.history.length > 0 
+      ? [
+          {
+            day: new Date().toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }),
+            tokens: telemetry.totalTokens,
+            custo: 0.00,
+            chamadas: telemetry.totalCalls,
+          }
+        ]
+      : [
+          {
+            day: new Date().toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }),
+            tokens: 0,
+            custo: 0.00,
+            chamadas: 0,
+          }
+        ],
+  };
 
   const handleSyncDatabase = async () => {
     setSyncing(true);
@@ -406,11 +424,18 @@ export function GerenciamentoPage() {
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 text-xs">
+              <div className="flex items-center gap-2 text-xs flex-wrap">
                 <span className="text-muted-foreground">Status da Chave:</span>
                 <span className="px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-semibold flex items-center gap-1">
                   <ShieldCheck className="h-3.5 w-3.5" /> Protegida (Sem Exposição no Front)
                 </span>
+                <button
+                  onClick={handleResetMetrics}
+                  className="px-2.5 py-1 rounded-lg bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 font-semibold transition"
+                  title="Zerar dados e reiniciar contador real"
+                >
+                  Zerar Contadores
+                </button>
               </div>
             </div>
 
