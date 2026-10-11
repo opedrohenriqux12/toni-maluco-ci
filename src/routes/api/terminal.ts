@@ -70,39 +70,60 @@ export const Route = createFileRoute("/api/terminal")({
           // 1. Provedor NVIDIA NIM (Seguro no backend)
           if (nvidiaKey) {
             try {
-              const nvidiaRes = await fetch("https://integrate.api.nvidia.com/v1/chat/completions", {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  "Authorization": `Bearer ${nvidiaKey.trim()}`,
-                },
-                body: JSON.stringify({
-                  model: body.model || "meta/llama-3.3-70b-instruct",
-                  messages: [
-                    { role: "system", content: CLAUDE_CODE_SYSTEM_PROMPT },
-                    ...history.map((m) => ({ role: m.role, content: m.content })),
-                    { role: "user", content: command },
-                  ],
-                  temperature: 0.2,
-                  max_tokens: 1024,
-                }),
-              });
+              // Lista de modelos suportados para tentar em ordem
+              const candidateModels = [
+                body.model,
+                "qwen/qwen2.5-coder-32b-instruct",
+                "meta/llama-3.1-70b-instruct",
+                "deepseek-ai/deepseek-r1",
+              ].filter(Boolean) as string[];
 
-              if (!nvidiaRes.ok) {
-                const errData = await nvidiaRes.text();
-                throw new Error(`NVIDIA HTTP ${nvidiaRes.status}: ${errData}`);
+              let reply = "";
+              let lastErr = "";
+
+              for (const modelToTry of candidateModels) {
+                try {
+                  const nvidiaRes = await fetch("https://integrate.api.nvidia.com/v1/chat/completions", {
+                    method: "POST",
+                    headers: {
+                      "Content-Type": "application/json",
+                      "Authorization": `Bearer ${nvidiaKey.trim()}`,
+                    },
+                    body: JSON.stringify({
+                      model: modelToTry,
+                      messages: [
+                        { role: "system", content: CLAUDE_CODE_SYSTEM_PROMPT },
+                        ...history.map((m) => ({ role: m.role, content: m.content })),
+                        { role: "user", content: command },
+                      ],
+                      temperature: 0.2,
+                      max_tokens: 1024,
+                    }),
+                  });
+
+                  if (nvidiaRes.ok) {
+                    const data = await nvidiaRes.json();
+                    reply = data.choices?.[0]?.message?.content || "";
+                    if (reply) break;
+                  } else {
+                    lastErr = await nvidiaRes.text();
+                  }
+                } catch (e: any) {
+                  lastErr = e?.message || "";
+                }
               }
 
-              const data = await nvidiaRes.json();
-              const reply = data.choices?.[0]?.message?.content || "[Sem resposta gerada pelo modelo]";
+              if (reply) {
+                return new Response(reply, {
+                  status: 200,
+                  headers: {
+                    "Content-Type": "text/plain; charset=utf-8",
+                    "X-Provider-Used": "nvidia-nim",
+                  },
+                });
+              }
 
-              return new Response(reply, {
-                status: 200,
-                headers: {
-                  "Content-Type": "text/plain; charset=utf-8",
-                  "X-Provider-Used": "nvidia-nim",
-                },
-              });
+              throw new Error(`Nenhum modelo respondeu. Último log: ${lastErr}`);
             } catch (nvidiaErr: any) {
               console.error("Erro na NVIDIA NIM:", nvidiaErr);
               const fallbackText = getClaudeCodeOfflineResponse(command);
