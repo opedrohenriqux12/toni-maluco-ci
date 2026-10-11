@@ -70,24 +70,33 @@ export const Route = createFileRoute("/api/terminal")({
           // 1. Provedor NVIDIA NIM (Seguro no backend)
           if (nvidiaKey) {
             try {
-              const provider = createOpenAI({
-                apiKey: nvidiaKey,
-                baseURL: "https://integrate.api.nvidia.com/v1",
+              const nvidiaRes = await fetch("https://integrate.api.nvidia.com/v1/chat/completions", {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  "Authorization": `Bearer ${nvidiaKey.trim()}`,
+                },
+                body: JSON.stringify({
+                  model: body.model || "meta/llama-3.3-70b-instruct",
+                  messages: [
+                    { role: "system", content: CLAUDE_CODE_SYSTEM_PROMPT },
+                    ...history.map((m) => ({ role: m.role, content: m.content })),
+                    { role: "user", content: command },
+                  ],
+                  temperature: 0.2,
+                  max_tokens: 1024,
+                }),
               });
 
-              const messages = [
-                ...history.map((m) => ({ role: m.role, content: m.content })),
-                { role: "user" as const, content: command },
-              ];
+              if (!nvidiaRes.ok) {
+                const errData = await nvidiaRes.text();
+                throw new Error(`NVIDIA HTTP ${nvidiaRes.status}: ${errData}`);
+              }
 
-              const result = await generateText({
-                model: provider.chat(body.model || "meta/llama-3.3-70b-instruct"),
-                system: CLAUDE_CODE_SYSTEM_PROMPT,
-                messages,
-                abortSignal: request.signal,
-              });
+              const data = await nvidiaRes.json();
+              const reply = data.choices?.[0]?.message?.content || "[Sem resposta gerada pelo modelo]";
 
-              return new Response(result.text, {
+              return new Response(reply, {
                 status: 200,
                 headers: {
                   "Content-Type": "text/plain; charset=utf-8",
@@ -96,7 +105,6 @@ export const Route = createFileRoute("/api/terminal")({
               });
             } catch (nvidiaErr: any) {
               console.error("Erro na NVIDIA NIM:", nvidiaErr);
-              // Fallback gracioso com mensagem do erro real para diagnóstico
               const fallbackText = getClaudeCodeOfflineResponse(command);
               return new Response(`[NVIDIA NIM Aviso: ${nvidiaErr?.message || "conexão temporária"}]\n\n${fallbackText}`, {
                 status: 200,
