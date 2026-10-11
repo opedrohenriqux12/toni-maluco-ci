@@ -51,14 +51,19 @@ export function TrendingPage() {
     }
   };
 
-  // Main Topics Data (Persistent localStorage)
+  // Main Topics Data (Persistent localStorage v3 - Zero mock data)
   const [topics, setTopics] = useState<TrendingTopic[]>(() => {
-    if (typeof window === "undefined") return initialMockTopics;
-    const saved = localStorage.getItem("trending_topics_v2");
+    if (typeof window === "undefined") return [];
+    const saved = localStorage.getItem("trending_topics_v3");
     if (saved) {
-      try { return JSON.parse(saved); } catch (e) { console.error(e); }
+      try { 
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          return parsed.filter((t) => !t.isExample && !t.id.startsWith("top-"));
+        }
+      } catch (e) { console.error(e); }
     }
-    return initialMockTopics;
+    return [];
   });
 
   // Undo History
@@ -67,7 +72,7 @@ export function TrendingPage() {
   // Sync to localStorage
   useEffect(() => {
     if (typeof window !== "undefined") {
-      localStorage.setItem("trending_topics_v2", JSON.stringify(topics));
+      localStorage.setItem("trending_topics_v3", JSON.stringify(topics));
     }
   }, [topics]);
 
@@ -339,21 +344,6 @@ export function TrendingPage() {
         </button>
       </div>
 
-      {/* Mock Example Warning Banner */}
-      {!hasCustomData && (
-        <div className="glass p-3 rounded-lg border border-amber-500/30 bg-amber-500/10 flex items-center justify-between text-xs text-amber-200">
-          <div className="flex items-center gap-2">
-            <Info className="h-4 w-4 text-amber-400 shrink-0" />
-            <span>Exibindo <strong>dados de exemplo</strong> para demonstração. Quando você cadastrar seus tópicos reais, eles substituirão este modelo.</span>
-          </div>
-          <button 
-            onClick={handleClearExamples}
-            className="rounded px-2.5 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 font-semibold transition shrink-0"
-          >
-            Começar do zero
-          </button>
-        </div>
-      )}
 
       {/* Render Active Sub-Tab Component */}
       {activeTab === "radar" && (
@@ -823,6 +813,19 @@ function RadarTab({
               );
             })}
           </div>
+        </div>
+      )}
+
+      {/* Estado Vazio Limpo */}
+      {filteredTopics.length === 0 && (
+        <div className="glass p-12 text-center rounded-2xl border border-border/60 space-y-3">
+          <div className="mx-auto h-12 w-12 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary glow">
+            <Sparkles className="h-6 w-6" />
+          </div>
+          <h4 className="text-base font-bold text-foreground">Nenhum tópico cadastrado</h4>
+          <p className="text-xs text-muted-foreground max-w-md mx-auto">
+            Todos os dados de exemplo foram removidos. Adicione novos tópicos reais com o botão "Novo tópico" acima ou descubra oportunidades no Radar X da IA.
+          </p>
         </div>
       )}
     </div>

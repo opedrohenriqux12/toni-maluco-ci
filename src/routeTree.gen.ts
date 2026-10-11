@@ -23,6 +23,7 @@ import { Route as TrendingRouteImport } from './routes/trending'
 import { Route as ApiChatRouteImport } from './routes/api/chat'
 import { Route as ApiGenerateAdRouteImport } from './routes/api/generate-ad'
 import { Route as ApiGenerateScriptRouteImport } from './routes/api/generate-script'
+import { Route as ApiRadarAiRouteImport } from './routes/api/radar-ai'
 import { Route as ApiTerminalRouteImport } from './routes/api/terminal'
 import { Route as ConselhoIndexRouteImport } from './routes/conselho.index'
 import { Route as ConselhoThreadIdRouteImport } from './routes/conselho.$threadId'
@@ -97,6 +98,11 @@ const ApiGenerateScriptRoute = ApiGenerateScriptRouteImport.update({
   path: '/api/generate-script',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiRadarAiRoute = ApiRadarAiRouteImport.update({
+  id: '/api/radar-ai',
+  path: '/api/radar-ai',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiTerminalRoute = ApiTerminalRouteImport.update({
   id: '/api/terminal',
   path: '/api/terminal',
@@ -128,6 +134,7 @@ export interface FileRoutesByFullPath {
   '/api/chat': typeof ApiChatRoute
   '/api/generate-ad': typeof ApiGenerateAdRoute
   '/api/generate-script': typeof ApiGenerateScriptRoute
+  '/api/radar-ai': typeof ApiRadarAiRoute
   '/api/terminal': typeof ApiTerminalRoute
   '/conselho/$threadId': typeof ConselhoThreadIdRoute
   '/conselho/': typeof ConselhoIndexRoute
@@ -146,6 +153,7 @@ export interface FileRoutesByTo {
   '/api/chat': typeof ApiChatRoute
   '/api/generate-ad': typeof ApiGenerateAdRoute
   '/api/generate-script': typeof ApiGenerateScriptRoute
+  '/api/radar-ai': typeof ApiRadarAiRoute
   '/api/terminal': typeof ApiTerminalRoute
   '/conselho/$threadId': typeof ConselhoThreadIdRoute
   '/conselho': typeof ConselhoIndexRoute
@@ -166,6 +174,7 @@ export interface FileRoutesById {
   '/api/chat': typeof ApiChatRoute
   '/api/generate-ad': typeof ApiGenerateAdRoute
   '/api/generate-script': typeof ApiGenerateScriptRoute
+  '/api/radar-ai': typeof ApiRadarAiRoute
   '/api/terminal': typeof ApiTerminalRoute
   '/conselho/$threadId': typeof ConselhoThreadIdRoute
   '/conselho/': typeof ConselhoIndexRoute
@@ -187,6 +196,7 @@ export interface FileRouteTypes {
     | '/api/chat'
     | '/api/generate-ad'
     | '/api/generate-script'
+    | '/api/radar-ai'
     | '/api/terminal'
     | '/conselho/$threadId'
     | '/conselho/'
@@ -205,6 +215,7 @@ export interface FileRouteTypes {
     | '/api/chat'
     | '/api/generate-ad'
     | '/api/generate-script'
+    | '/api/radar-ai'
     | '/api/terminal'
     | '/conselho/$threadId'
     | '/conselho'
@@ -224,6 +235,7 @@ export interface FileRouteTypes {
     | '/api/chat'
     | '/api/generate-ad'
     | '/api/generate-script'
+    | '/api/radar-ai'
     | '/api/terminal'
     | '/conselho/$threadId'
     | '/conselho/'
@@ -244,6 +256,7 @@ export interface RootRouteChildren {
   ApiChatRoute: typeof ApiChatRoute
   ApiGenerateAdRoute: typeof ApiGenerateAdRoute
   ApiGenerateScriptRoute: typeof ApiGenerateScriptRoute
+  ApiRadarAiRoute: typeof ApiRadarAiRoute
   ApiTerminalRoute: typeof ApiTerminalRoute
 }
 
@@ -347,6 +360,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiGenerateScriptRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/radar-ai': {
+      id: '/api/radar-ai'
+      path: '/api/radar-ai'
+      fullPath: '/api/radar-ai'
+      preLoaderRoute: typeof ApiRadarAiRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/terminal': {
       id: '/api/terminal'
       path: '/api/terminal'
@@ -400,6 +420,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiChatRoute: ApiChatRoute,
   ApiGenerateAdRoute: ApiGenerateAdRoute,
   ApiGenerateScriptRoute: ApiGenerateScriptRoute,
+  ApiRadarAiRoute: ApiRadarAiRoute,
   ApiTerminalRoute: ApiTerminalRoute,
 }
 export const routeTree = rootRouteImport
