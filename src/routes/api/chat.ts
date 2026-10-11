@@ -101,25 +101,29 @@ export const Route = createFileRoute("/api/chat")({
         // 1. Provedor NVIDIA NIM
         if (nvidiaKey) {
           try {
+            const cleanKey = nvidiaKey.trim().replace(/^['"]|['"]$/g, "");
+            const conversationMessages = messages.slice(-6).map((m) => ({
+              role: m.role === "assistant" ? "assistant" : "user",
+              content: m.parts.map((p) => (p.type === "text" ? p.text : "")).join(" "),
+            }));
+
+            // Payload oficial conforme especificação NVIDIA NIM Nemotron Reasoning
             const nvidiaRes = await fetch("https://integrate.api.nvidia.com/v1/chat/completions", {
-              signal: AbortSignal.timeout(8000),
+              signal: AbortSignal.timeout(30000),
               method: "POST",
               headers: {
                 "Content-Type": "application/json",
-                "Authorization": `Bearer ${nvidiaKey.trim()}`,
+                "Authorization": `Bearer ${cleanKey}`,
                 "Accept": "application/json",
               },
               body: JSON.stringify({
                 model: "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
                 messages: [
                   { role: "system", content: promptInstruction },
-                  ...messages.slice(-6).map((m) => ({
-                    role: m.role === "assistant" ? "assistant" : "user",
-                    content: m.parts.map((p) => (p.type === "text" ? p.text : "")).join(" "),
-                  })),
+                  ...conversationMessages,
                 ],
                 max_tokens: 4096,
-                reasoning_budget: 1024,
+                reasoning_budget: 2048,
                 temperature: 0.6,
                 top_p: 0.95,
                 stream: false,
@@ -128,35 +132,40 @@ export const Route = createFileRoute("/api/chat")({
 
             if (nvidiaRes.ok) {
               const nData = await nvidiaRes.json();
-              const reply = nData.choices?.[0]?.message?.content || "[Sem resposta gerada pelo conselho]";
-              const textId = generateUUID();
+              const reply = nData.choices?.[0]?.message?.content || "";
+              
+              if (reply && reply.trim().length > 0) {
+                const textId = generateUUID();
+                const stream = createUIMessageStream({
+                  execute: async ({ writer }) => {
+                    writer.write({ type: "start" });
+                    writer.write({ type: "start-step" });
+                    writer.write({ type: "text-start", id: textId });
+                    const chunkSize = 25;
+                    for (let i = 0; i < reply.length; i += chunkSize) {
+                      const chunk = reply.slice(i, i + chunkSize);
+                      writer.write({ type: "text-delta", id: textId, delta: chunk });
+                      await new Promise((r) => setTimeout(r, 12));
+                    }
+                    writer.write({ type: "text-end", id: textId });
+                    writer.write({ type: "finish-step" });
+                    writer.write({ type: "finish", finishReason: "stop" });
+                  },
+                });
 
-              const stream = createUIMessageStream({
-                execute: async ({ writer }) => {
-                  writer.write({ type: "start" });
-                  writer.write({ type: "start-step" });
-                  writer.write({ type: "text-start", id: textId });
-                  const chunkSize = 25;
-                  for (let i = 0; i < reply.length; i += chunkSize) {
-                    const chunk = reply.slice(i, i + chunkSize);
-                    writer.write({ type: "text-delta", id: textId, delta: chunk });
-                    await new Promise((r) => setTimeout(r, 15));
-                  }
-                  writer.write({ type: "text-end", id: textId });
-                  writer.write({ type: "finish-step" });
-                  writer.write({ type: "finish", finishReason: "stop" });
-                },
-              });
-
-              return createUIMessageStreamResponse({
-                stream,
-                headers: {
-                  "X-Provider-Used": "nvidia-nim",
-                },
-              });
+                return createUIMessageStreamResponse({
+                  stream,
+                  headers: {
+                    "X-Provider-Used": "nvidia-nim",
+                  },
+                });
+              }
+            } else {
+              const errBody = await nvidiaRes.text();
+              console.error(`NVIDIA NIM returned status ${nvidiaRes.status}: ${errBody}`);
             }
           } catch (e) {
-            console.error("NVIDIA NIM council error", e);
+            console.error("NVIDIA NIM council error:", e);
           }
         }
 
