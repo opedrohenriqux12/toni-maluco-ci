@@ -14,6 +14,9 @@ import {
 } from "lucide-react";
 import { AreaChart, Area, ResponsiveContainer, XAxis, YAxis, Tooltip } from "recharts";
 import { toast } from "sonner";
+import { XRadarSection } from "@/components/trending/XRadarSection";
+import { Calendar60DaysSection } from "@/components/trending/Calendar60DaysSection";
+import { XPostOpportunity } from "@/lib/xMonitorStore";
 
 export const Route = createFileRoute("/trending")({
   head: () => ({
@@ -28,20 +31,20 @@ export const Route = createFileRoute("/trending")({
 export function TrendingPage() {
   const navigate = useNavigate();
 
-  // Active Tab State (radar | oportunidades | calendario | seguindo)
-  const [activeTab, setActiveTab] = useState<"radar" | "oportunidades" | "calendario" | "seguindo">(() => {
+  // Active Tab State (radar | x-radar | oportunidades | calendario | seguindo)
+  const [activeTab, setActiveTab] = useState<"radar" | "x-radar" | "oportunidades" | "calendario" | "seguindo">(() => {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
       const tabParam = params.get("aba");
-      if (tabParam === "oportunidades" || tabParam === "calendario" || tabParam === "seguindo") {
-        return tabParam;
+      if (tabParam === "x-radar" || tabParam === "oportunidades" || tabParam === "calendario" || tabParam === "seguindo") {
+        return tabParam as any;
       }
     }
     return "radar";
   });
 
   // Sync tab state
-  const switchTab = (tab: "radar" | "oportunidades" | "calendario" | "seguindo") => {
+  const switchTab = (tab: "radar" | "x-radar" | "oportunidades" | "calendario" | "seguindo") => {
     setActiveTab(tab);
     if (typeof window !== "undefined" && window.location.search) {
       window.history.replaceState({}, "", window.location.pathname);
@@ -177,6 +180,60 @@ export function TrendingPage() {
     toast.success("CSV exportado com sucesso!");
   };
 
+  const handleTransformXToOpportunity = (item: XPostOpportunity) => {
+    const opp: OpportunityItem = {
+      id: "opp-x-" + Date.now(),
+      topicId: item.id,
+      topicName: `Radar X: ${item.author.name} (${item.author.handle})`,
+      column: "Nova",
+      suggestedProducts: [
+        {
+          name: item.aiAnalysis.marketNiche,
+          platform: "X / E-commerce",
+          cost: 0,
+          price: 250,
+          netMarginPct: 75,
+          risk: "Baixo",
+          liquidity: 90,
+        },
+      ],
+      notes: `Tese do Post:\n"${item.content}"\n\nAnálise de Oportunidade:\n${item.aiAnalysis.thesis}\n\nPlano de Ação:\n${item.aiAnalysis.actionPlan}`,
+      createdAt: new Date().toISOString(),
+    };
+    setOpportunities((prev) => [opp, ...prev]);
+    switchTab("oportunidades");
+    toast.success("Oportunidade adicionada ao quadro a partir do Radar X!", {
+      description: "Abrindo o Quadro de Oportunidades para você acompanhar.",
+    });
+  };
+
+  const handleTransformEventToOpportunity = (event: TrendingEvent) => {
+    const opp: OpportunityItem = {
+      id: "opp-ev-" + Date.now(),
+      topicId: event.id,
+      topicName: `Calendário: ${event.title}`,
+      column: "Nova",
+      suggestedProducts: [
+        {
+          name: event.opportunityAction || event.title,
+          platform: "Multi-plataforma",
+          cost: 100,
+          price: 135,
+          netMarginPct: 26,
+          risk: "Baixo",
+          liquidity: 85,
+        },
+      ],
+      notes: `Evento Estratégico:\n${event.title} (${event.startDate})\n\nAção Recomendada:\n${event.opportunityAction || event.notes || "Preparar estoque e campanhas de conversão."}`,
+      createdAt: new Date().toISOString(),
+    };
+    setOpportunities((prev) => [opp, ...prev]);
+    switchTab("oportunidades");
+    toast.success("Oportunidade adicionada ao quadro a partir do Calendário!", {
+      description: `Evento agendado para ${event.startDate}`,
+    });
+  };
+
   // Check if using only custom data
   const hasCustomData = topics.some((t) => !t.isExample);
   const unreadAlertsCount = alerts.filter(a => !a.read).length;
@@ -237,17 +294,31 @@ export function TrendingPage() {
         </div>
       </div>
 
-      {/* Internal Navigation Tabs (Radar | Oportunidades | Calendário | Seguindo) */}
-      <div className="flex border-b border-border/40 gap-6 text-sm font-medium">
+      {/* Internal Navigation Tabs (Radar | Radar X | Oportunidades | Calendário | Seguindo) */}
+      <div className="flex border-b border-border/40 gap-6 text-sm font-medium overflow-x-auto scrollbar-none">
         <button
           onClick={() => switchTab("radar")}
-          className={`pb-3 border-b-2 transition flex items-center gap-2 ${activeTab === "radar" ? "border-primary text-primary font-bold" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+          className={`pb-3 border-b-2 transition flex items-center gap-2 whitespace-nowrap ${activeTab === "radar" ? "border-primary text-primary font-bold" : "border-transparent text-muted-foreground hover:text-foreground"}`}
         >
           <Zap className="h-4 w-4" /> Radar de Demanda
         </button>
         <button
+          onClick={() => switchTab("x-radar")}
+          className={`pb-3 border-b-2 transition flex items-center gap-2 whitespace-nowrap relative ${activeTab === "x-radar" ? "border-primary text-primary font-bold" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+        >
+          <span className="flex items-center gap-1.5 font-bold">
+            <svg className="h-3.5 w-3.5 fill-current" viewBox="0 0 24 24">
+              <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+            </svg>
+            Radar X (Elon Musk & IA)
+          </span>
+          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/20 px-1.5 py-0.2 text-[9px] font-bold text-emerald-400 border border-emerald-500/30">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" /> LIVE
+          </span>
+        </button>
+        <button
           onClick={() => switchTab("oportunidades")}
-          className={`pb-3 border-b-2 transition flex items-center gap-2 ${activeTab === "oportunidades" ? "border-primary text-primary font-bold" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+          className={`pb-3 border-b-2 transition flex items-center gap-2 whitespace-nowrap ${activeTab === "oportunidades" ? "border-primary text-primary font-bold" : "border-transparent text-muted-foreground hover:text-foreground"}`}
         >
           <Target className="h-4 w-4" /> Quadro de Oportunidades
           {opportunities.length > 0 && (
@@ -256,13 +327,13 @@ export function TrendingPage() {
         </button>
         <button
           onClick={() => switchTab("calendario")}
-          className={`pb-3 border-b-2 transition flex items-center gap-2 ${activeTab === "calendario" ? "border-primary text-primary font-bold" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+          className={`pb-3 border-b-2 transition flex items-center gap-2 whitespace-nowrap ${activeTab === "calendario" ? "border-primary text-primary font-bold" : "border-transparent text-muted-foreground hover:text-foreground"}`}
         >
-          <CalendarIcon className="h-4 w-4" /> Calendário de Eventos
+          <CalendarIcon className="h-4 w-4" /> Calendário de Eventos (60 Dias)
         </button>
         <button
           onClick={() => switchTab("seguindo")}
-          className={`pb-3 border-b-2 transition flex items-center gap-2 ${activeTab === "seguindo" ? "border-primary text-primary font-bold" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+          className={`pb-3 border-b-2 transition flex items-center gap-2 whitespace-nowrap ${activeTab === "seguindo" ? "border-primary text-primary font-bold" : "border-transparent text-muted-foreground hover:text-foreground"}`}
         >
           <Bookmark className="h-4 w-4" /> Tópicos Seguidos
         </button>
@@ -294,6 +365,12 @@ export function TrendingPage() {
         />
       )}
 
+      {activeTab === "x-radar" && (
+        <XRadarSection 
+          onTransformToOpportunity={handleTransformXToOpportunity} 
+        />
+      )}
+
       {activeTab === "oportunidades" && (
         <OportunidadesTab 
           opportunities={opportunities} 
@@ -302,17 +379,17 @@ export function TrendingPage() {
       )}
 
       {activeTab === "calendario" && (
-        <CalendarioTab 
+        <Calendar60DaysSection 
           events={events} 
           setEvents={setEvents} 
-          topics={topics}
+          onTransformToOpportunity={handleTransformEventToOpportunity}
         />
       )}
 
       {activeTab === "seguindo" && (
         <SeguindoTab 
           topics={topics} 
-          setTopics={setTopics}
+          setTopics={setTopics} 
           onSelectTopic={(t) => setSelectedTopicForDetail(t)}
         />
       )}
