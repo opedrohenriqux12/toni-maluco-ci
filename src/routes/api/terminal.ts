@@ -81,6 +81,11 @@ export const Route = createFileRoute("/api/terminal")({
               let reply = "";
               let lastErr = "";
 
+              let promptTokens = 0;
+              let completionTokens = 0;
+              let totalTokens = 0;
+              let usedModel = "";
+
               for (const modelToTry of candidateModels) {
                 try {
                   const nvidiaRes = await fetch("https://integrate.api.nvidia.com/v1/chat/completions", {
@@ -104,7 +109,13 @@ export const Route = createFileRoute("/api/terminal")({
                   if (nvidiaRes.ok) {
                     const data = await nvidiaRes.json();
                     reply = data.choices?.[0]?.message?.content || "";
-                    if (reply) break;
+                    if (reply) {
+                      usedModel = modelToTry;
+                      promptTokens = data.usage?.prompt_tokens || Math.round(command.length / 4);
+                      completionTokens = data.usage?.completion_tokens || Math.round(reply.length / 4);
+                      totalTokens = data.usage?.total_tokens || (promptTokens + completionTokens);
+                      break;
+                    }
                   } else {
                     lastErr = await nvidiaRes.text();
                   }
@@ -119,6 +130,10 @@ export const Route = createFileRoute("/api/terminal")({
                   headers: {
                     "Content-Type": "text/plain; charset=utf-8",
                     "X-Provider-Used": "nvidia-nim",
+                    "X-Model-Used": usedModel,
+                    "X-Prompt-Tokens": String(promptTokens),
+                    "X-Completion-Tokens": String(completionTokens),
+                    "X-Total-Tokens": String(totalTokens),
                   },
                 });
               }

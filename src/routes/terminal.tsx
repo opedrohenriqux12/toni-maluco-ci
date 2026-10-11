@@ -6,6 +6,7 @@ import {
   ShieldCheck, RefreshCw, Sparkles, Layers, ArrowRight, CornerDownLeft
 } from "lucide-react";
 import { toast } from "sonner";
+import { recordAiCall, getTelemetryData } from "@/lib/telemetryStore";
 
 export const Route = createFileRoute("/terminal")({
   head: () => ({
@@ -128,6 +129,11 @@ export function TerminalPage() {
         throw new Error(`Falha no servidor (${res.status})`);
       }
 
+      const promptTokens = Number(res.headers.get("X-Prompt-Tokens")) || 0;
+      const completionTokens = Number(res.headers.get("X-Completion-Tokens")) || 0;
+      const totalTokens = Number(res.headers.get("X-Total-Tokens")) || 0;
+      const modelUsed = res.headers.get("X-Model-Used") || "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning";
+
       const reader = res.body?.getReader();
       const decoder = new TextDecoder();
       let fullText = "";
@@ -144,9 +150,32 @@ export function TerminalPage() {
         }
       } else {
         const text = await res.text();
+        fullText = text;
         setOutputs((prev) =>
           prev.map((o) => (o.id === newId ? { ...o, response: text } : o))
         );
+      }
+
+      // Grava telemetria real no store se houve tokens
+      if (totalTokens > 0 || fullText.length > 0) {
+        const computedTokens = totalTokens > 0 ? totalTokens : Math.round((cmd.length + fullText.length) / 4);
+        const updatedTele = recordAiCall({
+          provider: "nvidia-nim",
+          model: modelUsed,
+          promptTokens: promptTokens || Math.round(cmd.length / 4),
+          completionTokens: completionTokens || Math.round(fullText.length / 4),
+          totalTokens: computedTokens,
+          commandSnippet: cmd,
+        });
+
+        setProviderInfo((prev) => ({
+          ...prev,
+          telemetry: {
+            creditsLimit: updatedTele.creditsLimitNvidia,
+            creditsUsed: updatedTele.creditsUsedNvidia,
+            creditsRemaining: updatedTele.creditsRemainingNvidia,
+          },
+        }));
       }
     } catch (err: any) {
       setOutputs((prev) =>

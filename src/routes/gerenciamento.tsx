@@ -12,6 +12,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { brl } from "@/lib/data";
 import { toast } from "sonner";
+import { getTelemetryData } from "@/lib/telemetryStore";
 
 export const Route = createFileRoute("/gerenciamento")({
   head: () => ({
@@ -45,7 +46,13 @@ export function GerenciamentoPage() {
     checked_at: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
   });
 
-  // Telemetria e Consumo de IA (Pronto para conexão com OpenAI / Anthropic)
+  // Telemetria e Consumo de IA (NVIDIA NIM, OpenRouter e Modelos Locais)
+  const [telemetry, setTelemetry] = useState(() => getTelemetryData());
+
+  useEffect(() => {
+    setTelemetry(getTelemetryData());
+  }, []);
+
   const [aiMetrics, setAiMetrics] = useState({
     totalTokensMonth: 284500,
     monthlyLimitTokens: 2000000,
@@ -55,9 +62,9 @@ export function GerenciamentoPage() {
     totalCalls: 312,
     successRatePct: 99.6,
     modelsUsage: [
-      { model: "Claude 3.5 Sonnet / Opus", tokens: 184000, cost: 32.10, calls: 180 },
+      { model: "NVIDIA Nemotron 30B / Qwen Coder", tokens: 184000, cost: 0.00, calls: 180 },
       { model: "OpenAI GPT-4o / Mini", tokens: 86500, cost: 8.90, calls: 110 },
-      { model: "Gemini 2.5 Flash", tokens: 14000, cost: 1.60, calls: 22 },
+      { model: "DeepSeek R1 / Free", tokens: 14000, cost: 0.00, calls: 22 },
     ],
     dailyConsumption: [
       { day: "04/10", tokens: 32000, custo: 4.80, chamadas: 35 },
@@ -411,20 +418,44 @@ export function GerenciamentoPage() {
             <div className="space-y-2 pt-2 border-t border-border/40">
               <div className="flex justify-between items-center text-xs">
                 <span className="font-semibold text-muted-foreground">Consumo de Créditos NVIDIA NIM</span>
-                <span className="font-mono font-bold text-foreground">42 / 1.000 créditos usados (4.2%)</span>
+                <span className="font-mono font-bold text-foreground">
+                  {telemetry.creditsUsedNvidia} / {telemetry.creditsLimitNvidia} créditos usados ({((telemetry.creditsUsedNvidia / telemetry.creditsLimitNvidia) * 100).toFixed(1)}%)
+                </span>
               </div>
               <div className="h-2.5 w-full rounded-full bg-muted overflow-hidden">
                 <div
                   className="h-full rounded-full bg-emerald-400 glow transition-all duration-500"
-                  style={{ width: "4.2%" }}
+                  style={{ width: `${Math.max(1, (telemetry.creditsUsedNvidia / telemetry.creditsLimitNvidia) * 100)}%` }}
                 />
               </div>
               <div className="flex flex-wrap justify-between items-center text-[11px] text-muted-foreground gap-2 pt-1">
-                <span className="text-emerald-400 font-semibold">958 créditos restantes</span>
-                <span>Modelos habilitados: Llama 3.3 70B, Qwen 2.5 Coder 32B, DeepSeek R1</span>
-                <span>Renovação: Ciclo de 30 dias</span>
+                <span className="text-emerald-400 font-semibold">{telemetry.creditsRemainingNvidia} créditos restantes</span>
+                <span>Total de tokens monitorados: <strong className="text-foreground">{telemetry.totalTokens.toLocaleString("pt-BR")}</strong></span>
+                <span>Chamadas executadas: <strong className="text-foreground">{telemetry.totalCalls}</strong></span>
               </div>
             </div>
+
+            {/* Histórico recente de comandos e tokens */}
+            {telemetry.history.length > 0 && (
+              <div className="pt-2 border-t border-border/30 space-y-2">
+                <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider block">
+                  Últimas Execuções Monitoradas
+                </span>
+                <div className="space-y-1.5 max-h-36 overflow-y-auto font-mono text-[11px]">
+                  {telemetry.history.slice(0, 4).map((h) => (
+                    <div key={h.id} className="flex items-center justify-between p-2 rounded-lg bg-card/40 border border-border/30">
+                      <div className="truncate mr-2">
+                        <span className="text-primary font-bold">[{h.provider}]</span>{" "}
+                        <span className="text-foreground truncate">{h.commandSnippet}</span>
+                      </div>
+                      <div className="shrink-0 text-muted-foreground text-[10px]">
+                        <strong className="text-emerald-400">{h.totalTokens} tokens</strong> ({new Date(h.timestamp).toLocaleTimeString("pt-BR")})
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Métricas Rápidas de IA */}
