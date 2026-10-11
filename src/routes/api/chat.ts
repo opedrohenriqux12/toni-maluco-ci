@@ -212,7 +212,75 @@ export const Route = createFileRoute("/api/chat")({
           });
         }
 
-        // 4. Simulação Rica com Personalidades Fiéis aos Conselheiros
+        // 4. Se o Nemotron 30B falhar ou demorar, tenta meta/llama-3.3-70b-instruct pela NVIDIA
+        if (nvidiaKey) {
+          try {
+            const cleanKey = nvidiaKey.trim().replace(/^['"]|['"]$/g, "");
+            const conversationMessages = messages.slice(-6).map((m) => ({
+              role: m.role === "assistant" ? "assistant" : "user",
+              content: m.parts.map((p) => (p.type === "text" ? p.text : "")).join(" "),
+            }));
+
+            const llamaRes = await fetch("https://integrate.api.nvidia.com/v1/chat/completions", {
+              signal: AbortSignal.timeout(20000),
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${cleanKey}`,
+                "Accept": "application/json",
+              },
+              body: JSON.stringify({
+                model: "meta/llama-3.3-70b-instruct",
+                messages: [
+                  { role: "system", content: promptInstruction },
+                  ...conversationMessages,
+                ],
+                max_tokens: 2048,
+                temperature: 0.6,
+                top_p: 0.95,
+                stream: false,
+              }),
+            });
+
+            if (llamaRes.ok) {
+              const lData = await llamaRes.json();
+              const reply = lData.choices?.[0]?.message?.content || "";
+              if (reply && reply.trim().length > 0) {
+                const textId = generateUUID();
+                const stream = createUIMessageStream({
+                  execute: async ({ writer }) => {
+                    writer.write({ type: "start" });
+                    writer.write({ type: "start-step" });
+                    writer.write({ type: "text-start", id: textId });
+                    const chunkSize = 25;
+                    for (let i = 0; i < reply.length; i += chunkSize) {
+                      const chunk = reply.slice(i, i + chunkSize);
+                      writer.write({ type: "text-delta", id: textId, delta: chunk });
+                      await new Promise((r) => setTimeout(r, 12));
+                    }
+                    writer.write({ type: "text-end", id: textId });
+                    writer.write({ type: "finish-step" });
+                    writer.write({ type: "finish", finishReason: "stop" });
+                  },
+                });
+
+                return createUIMessageStreamResponse({
+                  stream,
+                  headers: {
+                    "X-Provider-Used": "nvidia-llama-3.3",
+                  },
+                });
+              }
+            } else {
+              const lErr = await llamaRes.text();
+              console.error(`NVIDIA Llama fallback failed (${llamaRes.status}):`, lErr);
+            }
+          } catch (e) {
+            console.error("NVIDIA Llama fallback error:", e);
+          }
+        }
+
+        // 5. Simulação Rica com Personalidades Fiéis aos Conselheiros
         const mode = body.mode ?? "individual";
         const requestedActive = body.active && body.active.length > 0 ? body.active : ["lucia"];
         const activeAdvisors = advisors.filter((a) => requestedActive.includes(a.id));
