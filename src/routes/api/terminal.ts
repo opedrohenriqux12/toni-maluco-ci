@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { createOpenAI } from "@ai-sdk/openai";
-import { streamText } from "ai";
+import { generateText, streamText } from "ai";
 
 const json = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
@@ -69,29 +69,40 @@ export const Route = createFileRoute("/api/terminal")({
 
           // 1. Provedor NVIDIA NIM (Seguro no backend)
           if (nvidiaKey) {
-            const provider = createOpenAI({
-              apiKey: nvidiaKey,
-              baseURL: "https://integrate.api.nvidia.com/v1",
-            });
+            try {
+              const provider = createOpenAI({
+                apiKey: nvidiaKey,
+                baseURL: "https://integrate.api.nvidia.com/v1",
+              });
 
-            const messages = [
-              ...history.map((m) => ({ role: m.role, content: m.content })),
-              { role: "user" as const, content: command },
-            ];
+              const messages = [
+                ...history.map((m) => ({ role: m.role, content: m.content })),
+                { role: "user" as const, content: command },
+              ];
 
-            const result = streamText({
-              model: provider(body.model || "meta/llama-3.3-70b-instruct"),
-              system: CLAUDE_CODE_SYSTEM_PROMPT,
-              messages,
-              abortSignal: request.signal,
-            });
+              const result = await generateText({
+                model: provider(body.model || "meta/llama-3.3-70b-instruct"),
+                system: CLAUDE_CODE_SYSTEM_PROMPT,
+                messages,
+                abortSignal: request.signal,
+              });
 
-            return result.toTextStreamResponse({
-              headers: {
-                "Content-Type": "text/plain; charset=utf-8",
-                "X-Provider-Used": "nvidia-nim",
-              },
-            });
+              return new Response(result.text, {
+                status: 200,
+                headers: {
+                  "Content-Type": "text/plain; charset=utf-8",
+                  "X-Provider-Used": "nvidia-nim",
+                },
+              });
+            } catch (nvidiaErr: any) {
+              console.error("Erro na NVIDIA NIM:", nvidiaErr);
+              // Fallback gracioso com mensagem do erro real para diagnóstico
+              const fallbackText = getClaudeCodeOfflineResponse(command);
+              return new Response(`[NVIDIA NIM Aviso: ${nvidiaErr?.message || "conexão temporária"}]\n\n${fallbackText}`, {
+                status: 200,
+                headers: { "Content-Type": "text/plain; charset=utf-8", "X-Provider-Used": "nvidia-nim-fallback" },
+              });
+            }
           }
 
           // 2. Provedor OpenRouter Gratuito
