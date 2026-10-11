@@ -67,84 +67,58 @@ export const Route = createFileRoute("/api/terminal")({
           const openRouterKey = process.env["OPENROUTER_API_KEY"];
           const openAiKey = process.env["OPENAI_API_KEY"];
 
-          // 1. Provedor NVIDIA NIM (Seguro no backend)
+          // 1. Provedor NVIDIA NIM (Seguro no backend com o payload oficial)
           if (nvidiaKey) {
             try {
-              // Modelos oficiais disponíveis na sua conta NVIDIA NIM:
-              const candidateModels = [
-                body.model,
-                "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
-                "qwen/qwen2.5-coder-32b-instruct",
-                "meta/llama-3.3-70b-instruct",
-              ].filter(Boolean) as string[];
+              const nvidiaRes = await fetch("https://integrate.api.nvidia.com/v1/chat/completions", {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  "Authorization": `Bearer ${nvidiaKey.trim()}`,
+                  "Accept": "application/json",
+                },
+                body: JSON.stringify({
+                  model: "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+                  messages: [
+                    { role: "system", content: CLAUDE_CODE_SYSTEM_PROMPT },
+                    ...history.map((m) => ({ role: m.role, content: m.content })),
+                    { role: "user", content: command },
+                  ],
+                  max_tokens: 4096,
+                  reasoning_budget: 1024,
+                  temperature: 0.6,
+                  top_p: 0.95,
+                  stream: false,
+                }),
+              });
 
-              let reply = "";
-              let lastErr = "";
-
-              let promptTokens = 0;
-              let completionTokens = 0;
-              let totalTokens = 0;
-              let usedModel = "";
-
-              for (const modelToTry of candidateModels) {
-                try {
-                  const nvidiaRes = await fetch("https://integrate.api.nvidia.com/v1/chat/completions", {
-                    method: "POST",
-                    headers: {
-                      "Content-Type": "application/json",
-                      "Authorization": `Bearer ${nvidiaKey.trim()}`,
-                    },
-                    body: JSON.stringify({
-                      model: modelToTry,
-                      messages: [
-                        { role: "system", content: CLAUDE_CODE_SYSTEM_PROMPT },
-                        ...history.map((m) => ({ role: m.role, content: m.content })),
-                        { role: "user", content: command },
-                      ],
-                      temperature: 0.2,
-                      max_tokens: 1024,
-                    }),
-                  });
-
-                  if (nvidiaRes.ok) {
-                    const data = await nvidiaRes.json();
-                    reply = data.choices?.[0]?.message?.content || "";
-                    if (reply) {
-                      usedModel = modelToTry;
-                      promptTokens = data.usage?.prompt_tokens || Math.round(command.length / 4);
-                      completionTokens = data.usage?.completion_tokens || Math.round(reply.length / 4);
-                      totalTokens = data.usage?.total_tokens || (promptTokens + completionTokens);
-                      break;
-                    }
-                  } else {
-                    lastErr = await nvidiaRes.text();
-                  }
-                } catch (e: any) {
-                  lastErr = e?.message || "";
-                }
+              if (!nvidiaRes.ok) {
+                const errText = await nvidiaRes.text();
+                throw new Error(`HTTP ${nvidiaRes.status}: ${errText}`);
               }
 
-              if (reply) {
-                return new Response(reply, {
-                  status: 200,
-                  headers: {
-                    "Content-Type": "text/plain; charset=utf-8",
-                    "X-Provider-Used": "nvidia-nim",
-                    "X-Model-Used": usedModel,
-                    "X-Prompt-Tokens": String(promptTokens),
-                    "X-Completion-Tokens": String(completionTokens),
-                    "X-Total-Tokens": String(totalTokens),
-                  },
-                });
-              }
+              const data = await nvidiaRes.json();
+              const reply = data.choices?.[0]?.message?.content || "[Sem resposta gerada pelo modelo]";
+              const promptTokens = data.usage?.prompt_tokens || Math.round(command.length / 4);
+              const completionTokens = data.usage?.completion_tokens || Math.round(reply.length / 4);
+              const totalTokens = data.usage?.total_tokens || (promptTokens + completionTokens);
 
-              throw new Error(`Nenhum modelo respondeu. Último log: ${lastErr}`);
+              return new Response(reply, {
+                status: 200,
+                headers: {
+                  "Content-Type": "text/plain; charset=utf-8",
+                  "X-Provider-Used": "nvidia-nim",
+                  "X-Model-Used": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+                  "X-Prompt-Tokens": String(promptTokens),
+                  "X-Completion-Tokens": String(completionTokens),
+                  "X-Total-Tokens": String(totalTokens),
+                },
+              });
             } catch (nvidiaErr: any) {
               console.error("Erro na NVIDIA NIM:", nvidiaErr);
-              const fallbackText = getClaudeCodeOfflineResponse(command);
-              return new Response(`[NVIDIA NIM Aviso: ${nvidiaErr?.message || "conexão temporária"}]\n\n${fallbackText}`, {
-                status: 200,
-                headers: { "Content-Type": "text/plain; charset=utf-8", "X-Provider-Used": "nvidia-nim-fallback" },
+              return new Response(`[ERRO NVIDIA NIM: ${nvidiaErr?.message || "Falha na requisição"}]`, {
+                status: 500,
+                headers: { "Content-Type": "text/plain; charset=utf-8" },
               });
             }
           }
