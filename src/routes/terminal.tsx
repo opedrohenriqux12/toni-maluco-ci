@@ -1,8 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { PageTitle } from "@/components/AppShell";
 import { useState, useRef, useEffect } from "react";
-import { 
-  Terminal as TerminalIcon, Play, Copy, Check, Trash2, Cpu, 
+import {
+  Terminal as TerminalIcon, Play, Copy, Check, Trash2, Cpu,
   ShieldCheck, RefreshCw, Sparkles, Layers, ArrowRight, CornerDownLeft,
   Folder, FolderPlus, Save, Bookmark
 } from "lucide-react";
@@ -53,6 +53,7 @@ export function TerminalPage() {
     activeProvider: string;
     hasNvidia: boolean;
     hasOpenRouter: boolean;
+    hasOpenAI: boolean;
     telemetry: {
       creditsLimit: number;
       creditsUsed: number;
@@ -62,6 +63,7 @@ export function TerminalPage() {
     activeProvider: "Detectando...",
     hasNvidia: false,
     hasOpenRouter: false,
+    hasOpenAI: false,
     telemetry: {
       creditsLimit: 1000,
       creditsUsed: 42,
@@ -89,6 +91,7 @@ export function TerminalPage() {
           activeProvider: data.activeProvider,
           hasNvidia: data.hasNvidia,
           hasOpenRouter: data.hasOpenRouter,
+          hasOpenAI: data.hasOpenAI,
           telemetry: {
             creditsLimit: data.telemetry?.monthlyCreditsLimit || 1000,
             creditsUsed: data.telemetry?.creditsUsed || 42,
@@ -100,6 +103,9 @@ export function TerminalPage() {
       setProviderInfo((prev) => ({
         ...prev,
         activeProvider: "Offline / Simulação Inteligente",
+        hasNvidia: false,
+        hasOpenRouter: false,
+        hasOpenAI: false,
       }));
     }
   };
@@ -132,7 +138,7 @@ export function TerminalPage() {
       command: cmd,
       response: "",
       timestamp: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
-      provider: providerInfo.activeProvider,
+      provider: providerInfo.activeProvider, // temporary, will be updated from header
     };
 
     setOutputs((prev) => [...prev, newOutput]);
@@ -145,10 +151,10 @@ export function TerminalPage() {
       setTimeout(async () => {
         const res = await virtualOS.executeCommand(trimmed);
         const resultText = res.stderr ? `[STDERR]\n${res.stderr}` : res.stdout || "(sem saída)";
-        
+
         setOutputs((prev) =>
-          prev.map((o) => (o.id === newId ? { 
-            ...o, 
+          prev.map((o) => (o.id === newId ? {
+            ...o,
             response: resultText,
             provider: "WebContainer Local",
           } : o))
@@ -174,6 +180,9 @@ export function TerminalPage() {
         throw new Error(`Falha no servidor (${res.status})`);
       }
 
+      // Get provider from header, fallback to state or unknown
+      const providerFromHeader = res.headers.get("X-Provider-Used") || providerInfo.activeProvider || "Desconhecido";
+
       const promptTokens = Number(res.headers.get("X-Prompt-Tokens")) || 0;
       const completionTokens = Number(res.headers.get("X-Completion-Tokens")) || 0;
       const totalTokens = Number(res.headers.get("X-Total-Tokens")) || 0;
@@ -190,14 +199,22 @@ export function TerminalPage() {
           const chunk = decoder.decode(value, { stream: true });
           fullText += chunk;
           setOutputs((prev) =>
-            prev.map((o) => (o.id === newId ? { ...o, response: fullText } : o))
+            prev.map((o) => (o.id === newId ? {
+              ...o,
+              response: fullText,
+              provider: providerFromHeader,
+            } : o))
           );
         }
       } else {
         const text = await res.text();
         fullText = text;
         setOutputs((prev) =>
-          prev.map((o) => (o.id === newId ? { ...o, response: text } : o))
+          prev.map((o) => (o.id === newId ? {
+            ...o,
+            response: text,
+            provider: providerFromHeader,
+          } : o))
         );
       }
 

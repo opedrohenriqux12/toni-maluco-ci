@@ -25,12 +25,12 @@ export const Route = createFileRoute("/api/terminal")({
         const hasOpenRouter = Boolean(process.env["OPENROUTER_API_KEY"]);
         const hasOpenAI = Boolean(process.env["OPENAI_API_KEY"]);
 
-        const activeProvider = hasNvidia 
-          ? "NVIDIA NIM (Llama 3.3 / Qwen Coder)" 
-          : hasOpenRouter 
-            ? "OpenRouter (DeepSeek R1 / Free)" 
-            : hasOpenAI 
-              ? "OpenAI (GPT-4o mini)" 
+        const activeProvider = hasNvidia
+          ? "NVIDIA NIM (Llama 3.3 / Qwen Coder)"
+          : hasOpenRouter
+            ? "OpenRouter (DeepSeek R1 / Free)"
+            : hasOpenAI
+              ? "OpenAI (GPT-4o mini)"
               : "Simulação Offline";
 
         return json(200, {
@@ -109,7 +109,6 @@ export const Route = createFileRoute("/api/terminal")({
                 headers: {
                   "Content-Type": "text/plain; charset=utf-8",
                   "X-Provider-Used": "nvidia-nim",
-                  "X-Model-Used": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
                   "X-Prompt-Tokens": String(promptTokens),
                   "X-Completion-Tokens": String(completionTokens),
                   "X-Total-Tokens": String(totalTokens),
@@ -117,10 +116,7 @@ export const Route = createFileRoute("/api/terminal")({
               });
             } catch (nvidiaErr: any) {
               console.error("Erro na NVIDIA NIM:", nvidiaErr);
-              return new Response(`[ERRO NVIDIA NIM: ${nvidiaErr?.message || "Falha na requisição"}]`, {
-                status: 500,
-                headers: { "Content-Type": "text/plain; charset=utf-8" },
-              });
+              // Fall through to try the next provider
             }
           }
 
@@ -178,7 +174,7 @@ export const Route = createFileRoute("/api/terminal")({
           const fallbackText = getClaudeCodeOfflineResponse(command);
           return new Response(fallbackText, {
             status: 200,
-            headers: { 
+            headers: {
               "Content-Type": "text/plain; charset=utf-8",
               "X-Provider-Used": "claude-code-offline-engine"
             },
@@ -207,11 +203,11 @@ import time
 def check_marketplace_deals():
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
     url = "https://lista.mercadolivre.com.br/gift-card"
-    
+
     print("🔍 [INFO] Conectando ao catálogo de preços...")
-    # Executando análise com timeout seguro
+    // Executando análise com timeout seguro
     time.sleep(0.5)
-    print("✅ [OK] 12 anúncios minerados com margem estimada > 18%.")
+    print("✅ [OK] 12 anúncios minerados com margem estimada > 18%.");
 
 if __name__ == "__main__":
     check_marketplace_deals()

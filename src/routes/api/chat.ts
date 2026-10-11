@@ -1,11 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
-  import { createClient } from "@supabase/supabase-js";
-  import { createOpenAI } from "@ai-sdk/openai";
-  import { convertToModelMessages, streamText, type UIMessage } from "ai";
-  import type { Database, Json } from "@/integrations/supabase/types";
-  import { buildCouncilPrompt, type CouncilMode } from "@/lib/council-prompt";
-  import { advisors } from "@/lib/data";
-  import { generateUUID } from "@/lib/uuid";
+import { createClient } from "@supabase/supabase-js";
+import { createOpenAI } from "@ai-sdk/openai";
+import { convertToModelMessages, streamText, type UIMessage } from "ai";
+import type { Database, Json } from "@/integrations/supabase/types";
+import { buildCouncilPrompt, type CouncilMode } from "@/lib/council-prompt";
+import { advisors } from "@/lib/data";
+import { generateUUID } from "@/lib/uuid";
 
 const json = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
@@ -20,24 +20,29 @@ export const Route = createFileRoute("/api/chat")({
         let supabaseClient: ReturnType<typeof createClient<Database>> | null = null;
 
         if (authHeader) {
-          const token = authHeader.replace(/^Bearer\s+/i, "");
-          const url = process.env["SUPABASE_URL"]!;
-          const key = process.env["SUPABASE_PUBLISHABLE_KEY"]!;
-          const potentialClient = createClient<Database>(url, key, {
-            auth: { persistSession: false, autoRefreshToken: false },
-            global: {
-              fetch: (input, init) => {
-                const h = new Headers(init?.headers);
-                h.set("apikey", key);
-                h.set("Authorization", `Bearer ${token}`);
-                return fetch(input, { ...init, headers: h });
+          try {
+            const token = authHeader.replace(/^Bearer\s+/i, "");
+            const url = process.env["SUPABASE_URL"]!;
+            const key = process.env["SUPABASE_PUBLISHABLE_KEY"]!;
+            const potentialClient = createClient<Database>(url, key, {
+              auth: { persistSession: false, autoRefreshToken: false },
+              global: {
+                fetch: (input, init) => {
+                  const h = new Headers(init?.headers);
+                  h.set("apikey", key);
+                  h.set("Authorization", `Bearer ${token}`);
+                  return fetch(input, { ...init, headers: h });
+                },
               },
-            },
-          });
-          const { data: userData, error: userErr } = await potentialClient.auth.getUser(token);
-          if (!userErr && userData.user) {
-            userId = userData.user.id;
-            supabaseClient = potentialClient;
+            });
+            const { data: userData, error: userErr } = await potentialClient.auth.getUser(token);
+            if (!userErr && userData.user) {
+              userId = userData.user.id;
+              supabaseClient = potentialClient;
+            }
+          } catch (e) {
+            console.error("Failed to create Supabase client:", e);
+            // supabaseClient remains null
           }
         }
 
@@ -155,6 +160,7 @@ export const Route = createFileRoute("/api/chat")({
             }
           } catch (e) {
             console.error("NVIDIA NIM council error", e);
+            // Fall through to try the next provider
           }
         }
 
@@ -172,8 +178,15 @@ export const Route = createFileRoute("/api/chat")({
             abortSignal: request.signal,
           });
 
-          return result.toUIMessageStreamResponse({
+          const stream = result.toUIMessageStream({
             originalMessages: messages,
+          });
+
+          return new Response(stream, {
+            headers: {
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Provider-Used": "openrouter-free",
+            },
           });
         }
 
@@ -190,8 +203,15 @@ export const Route = createFileRoute("/api/chat")({
             abortSignal: request.signal,
           });
 
-          return result.toUIMessageStreamResponse({
+          const stream = result.toUIMessageStream({
             originalMessages: messages,
+          });
+
+          return new Response(stream, {
+            headers: {
+              "Content-Type": "text/plain; charset=utf-8",
+              "X-Provider-Used": "openai",
+            },
           });
         }
 
@@ -221,40 +241,41 @@ export const Route = createFileRoute("/api/chat")({
             simulatedResponse += `\nLembre-se: o conselho é uma ferramenta de reflexão, não uma decisão final.`;
           }
 
-          // Create a readable stream that simulates streaming by sending the response in small chunks
-          const stream = new ReadableStream({
-            async start(controller) {
-              // Split into chunks of ~20 characters for a typing effect
-              const chunkSize = 20;
-              for (let i = 0; i < simulatedResponse.length; i += chunkSize) {
-                const chunk = simulatedResponse.slice(i, i + chunkSize);
+        // Create a readable stream that simulates streaming by sending the response in small chunks
+        const stream = new ReadableStream({
+          async start(controller) {
+            // Split into chunks of ~20 characters for a typing effect
+            const chunkSize = 20;
+            for (let i = 0; i < simulatedResponse.length; i += chunkSize) {
+              const chunk = simulatedResponse.slice(i, i + chunkSize);
 
-                // Create a UIMessage chunk
-                const messageChunk = {
-                  id: generateUUID(),
-                  role: "assistant",
-                  content: chunk,
-                  parts: [{ type: "text", text: chunk }]
-                };
+              // Create a UIMessage chunk
+              const messageChunk = {
+                id: generateUUID(),
+                role: "assistant",
+                content: chunk,
+                parts: [{ type: "text", text: chunk }]
+              };
 
-                // Encode as JSON lines format (similar to what AI SDK expects)
-                const encoded = new TextEncoder().encode(JSON.stringify(messageChunk) + "\n");
-                controller.enqueue(encoded);
+              // Encode as JSON lines format (similar to what AI SDK expects)
+              const encoded = new TextEncoder().encode(JSON.stringify(messageChunk) + "\n");
+              controller.enqueue(encoded);
 
-                // Small delay to simulate typing
-                await new Promise(resolve => setTimeout(resolve, 30));
-              }
-
-              // Signal end of stream
-              controller.close();
+              // Small delay to simulate typing
+              await new Promise(resolve => setTimeout(resolve, 30));
             }
-          });
 
-          return new Response(stream, {
-            headers: {
-              "Content-Type": "text/plain; charset=utf-8",
-            },
-          });
+            // Signal end of stream
+            controller.close();
+          }
+        });
+
+        return new Response(stream, {
+          headers: {
+            "Content-Type": "text/plain; charset=utf-8",
+            "X-Provider-Used": "conselho-offline-simulation"
+          },
+        });
       },
     },
   },
