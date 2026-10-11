@@ -36,6 +36,28 @@ export function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [mfaCode, setMfaCode] = useState("");
   const [busy, setBusy] = useState(false);
+  const [needsEmailConfirmation, setNeedsEmailConfirmation] = useState(false);
+
+  const handleResendConfirmation = async () => {
+    const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail) {
+      toast.error("Informe seu e-mail para reenviar a confirmação.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const { error } = await supabase.auth.resend({
+        type: "signup",
+        email: cleanEmail,
+      });
+      if (error) throw error;
+      toast.success("Novo e-mail de ativação enviado! Verifique sua caixa de entrada e pasta de Spam.");
+    } catch (err: any) {
+      toast.error(err.message || "Não foi possível reenviar o e-mail no momento.");
+    } finally {
+      setBusy(false);
+    }
+  };
 
   // Load remembered email on mount
   useEffect(() => {
@@ -70,10 +92,11 @@ export function Login() {
     e.preventDefault();
     setBusy(true);
 
+    const cleanEmail = email.trim().toLowerCase();
     // Save or clear remembered email
     if (typeof window !== "undefined") {
-      if (rememberEmail && email) {
-        localStorage.setItem("tonimaluco_remembered_email", email.trim());
+      if (rememberEmail && cleanEmail) {
+        localStorage.setItem("tonimaluco_remembered_email", cleanEmail);
       } else {
         localStorage.removeItem("tonimaluco_remembered_email");
       }
@@ -82,13 +105,20 @@ export function Login() {
     try {
       if (mode === "in") {
         const { data, error } = await supabase.auth.signInWithPassword({
-          email: email.trim(),
+          email: cleanEmail,
           password,
         });
 
         if (error) {
-          // Anti-enumeration defense: Generic security message
-          throw new Error("E-mail ou credenciais incorretas.");
+          const errLower = error.message.toLowerCase();
+          if (errLower.includes("email not confirmed")) {
+            setNeedsEmailConfirmation(true);
+            throw new Error("Seu e-mail ainda não foi confirmado. Verifique sua caixa de entrada e spam, ou clique abaixo para reenviar a ativação.");
+          }
+          if (errLower.includes("invalid login credentials")) {
+            throw new Error("E-mail ou senha incorretos.");
+          }
+          throw new Error(error.message || "Erro ao realizar login.");
         }
 
         // Check if MFA TOTP is required (AAL2 verification)
@@ -109,7 +139,7 @@ export function Login() {
         }
 
         const { data, error } = await supabase.auth.signUp({
-          email: email.trim(),
+          email: cleanEmail,
           password,
           options: {
             emailRedirectTo: `${window.location.origin}${target}`,
@@ -117,23 +147,27 @@ export function Login() {
         });
 
         if (error) {
-          throw new Error("Não foi possível processar a solicitação no momento.");
+          if (error.message.toLowerCase().includes("user already registered")) {
+            throw new Error("Este e-mail já está cadastrado. Alterne para o modo 'Fazer login' ou use 'Esqueceu a senha?'.");
+          }
+          throw new Error(error.message || "Não foi possível processar o cadastro.");
         }
 
         if (!data.session) {
-          toast.success("Solicitação enviada! Verifique seu e-mail para validar a conta.");
+          setNeedsEmailConfirmation(true);
+          toast.info("Cadastro realizado! O Supabase enviou um link de ativação para seu e-mail. Confirme-o para liberar o acesso.", { duration: 10000 });
           setMode("in");
         } else {
           toast.success("Conta criada e verificada com sucesso!");
           navigate({ to: target });
         }
       } else if (mode === "forgot") {
-        const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+        const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
           redirectTo: `${window.location.origin}/login?redirect=${encodeURIComponent(target)}`,
         });
 
         if (error) {
-          throw new Error("Erro ao processar solicitação.");
+          throw new Error(error.message || "Erro ao processar solicitação.");
         }
 
         toast.success("Se o e-mail estiver cadastrado, um link de recuperação foi enviado.");
@@ -406,6 +440,29 @@ export function Login() {
                   Lembrar meu e-mail
                 </label>
               </div>
+
+              {/* Email Confirmation Alert Banner */}
+              {needsEmailConfirmation && (
+                <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-300 space-y-2 animate-in fade-in">
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-amber-400" />
+                    <div>
+                      <p className="font-semibold text-amber-200">Confirmação de e-mail pendente</p>
+                      <p className="text-[11px] text-amber-300/80 mt-0.5 leading-relaxed">
+                        O Supabase enviou um e-mail de ativação para <strong className="text-amber-100">{email || "seu endereço"}</strong>. Verifique sua caixa de entrada e a pasta de <strong>Spam / Lixo Eletrônico</strong> e clique no link para ativar sua conta.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleResendConfirmation}
+                    disabled={busy}
+                    className="w-full text-center text-[11px] font-bold text-amber-300 underline hover:text-white transition pt-0.5 disabled:opacity-50"
+                  >
+                    Reenviar e-mail de ativação agora
+                  </button>
+                </div>
+              )}
 
               {/* Submit Button */}
               <button
