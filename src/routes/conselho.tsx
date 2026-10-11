@@ -76,19 +76,59 @@ function ConsiglioLayout() {
 
   const threadsQuery = useQuery({
     queryKey: threadsKey,
-    enabled: !!user,
     queryFn: async () => {
-      try {
-        const { data, error } = await supabase.from("council_threads").select("id, title, updated_at").order("updated_at", { ascending: false });
-        if (!error && data) return data;
-      } catch (e) {
-        console.warn("Supabase threads fetch error", e);
+      // Carrega local primeiro para nunca ficar vazio
+      const saved = getSavedSessions("conselho");
+      const stored = localStorage.getItem("council_threads");
+      let baseList: Array<{ id: string; title: string; updated_at: string; projectId?: string }> = [];
+
+      if (stored) {
+        try {
+          baseList = JSON.parse(stored);
+        } catch {}
       }
-      return localThreads;
+
+      // Se há sessões salvas em projectStore que não estão na lista de threads, inclui
+      saved.forEach((s) => {
+        if (!baseList.some((b) => b.id === s.id)) {
+          baseList.push({
+            id: s.id,
+            title: s.title,
+            updated_at: s.updatedAt || s.createdAt,
+            projectId: s.projectId,
+          });
+        }
+      });
+
+      if (user) {
+        try {
+          const { data, error } = await supabase.from("council_threads").select("id, title, updated_at").order("updated_at", { ascending: false });
+          if (!error && data && data.length > 0) {
+            // Mescla threads remotas com as locais
+            const remoteMap = new Map(data.map((d) => [d.id, d]));
+            const combined = [...data];
+            baseList.forEach((bl) => {
+              if (!remoteMap.has(bl.id)) {
+                combined.push(bl as any);
+              }
+            });
+            return combined;
+          }
+        } catch (e) {
+          console.warn("Supabase threads fetch error", e);
+        }
+      }
+
+      // Merge com saved sessions para pegar os projectIds corretos
+      return baseList.map((t) => {
+        const match = saved.find((s) => s.id === t.id);
+        return match ? { ...t, projectId: match.projectId } : t;
+      });
     },
+    refetchOnWindowFocus: true,
   });
 
-  const allThreads = user ? (threadsQuery.data ?? localThreads) : localThreads;
+  const allThreads = threadsQuery.data ?? localThreads;
   const filteredThreads = selectedFolderFilter === null
     ? allThreads
     : selectedFolderFilter === "avulso"
