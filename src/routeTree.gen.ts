@@ -18,10 +18,12 @@ import { Route as InteligenciaRouteImport } from './routes/inteligencia'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as PerfilRouteImport } from './routes/perfil'
 import { Route as ScriptsRouteImport } from './routes/scripts'
+import { Route as TerminalRouteImport } from './routes/terminal'
 import { Route as TrendingRouteImport } from './routes/trending'
 import { Route as ApiChatRouteImport } from './routes/api/chat'
 import { Route as ApiGenerateAdRouteImport } from './routes/api/generate-ad'
 import { Route as ApiGenerateScriptRouteImport } from './routes/api/generate-script'
+import { Route as ApiTerminalRouteImport } from './routes/api/terminal'
 import { Route as ConselhoIndexRouteImport } from './routes/conselho.index'
 import { Route as ConselhoThreadIdRouteImport } from './routes/conselho.$threadId'
 
@@ -70,6 +72,11 @@ const ScriptsRoute = ScriptsRouteImport.update({
   path: '/scripts',
   getParentRoute: () => rootRouteImport,
 } as any)
+const TerminalRoute = TerminalRouteImport.update({
+  id: '/terminal',
+  path: '/terminal',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const TrendingRoute = TrendingRouteImport.update({
   id: '/trending',
   path: '/trending',
@@ -88,6 +95,11 @@ const ApiGenerateAdRoute = ApiGenerateAdRouteImport.update({
 const ApiGenerateScriptRoute = ApiGenerateScriptRouteImport.update({
   id: '/api/generate-script',
   path: '/api/generate-script',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiTerminalRoute = ApiTerminalRouteImport.update({
+  id: '/api/terminal',
+  path: '/api/terminal',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ConselhoIndexRoute = ConselhoIndexRouteImport.update({
@@ -111,10 +123,12 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/perfil': typeof PerfilRoute
   '/scripts': typeof ScriptsRoute
+  '/terminal': typeof TerminalRoute
   '/trending': typeof TrendingRoute
   '/api/chat': typeof ApiChatRoute
   '/api/generate-ad': typeof ApiGenerateAdRoute
   '/api/generate-script': typeof ApiGenerateScriptRoute
+  '/api/terminal': typeof ApiTerminalRoute
   '/conselho/$threadId': typeof ConselhoThreadIdRoute
   '/conselho/': typeof ConselhoIndexRoute
 }
@@ -127,10 +141,12 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/perfil': typeof PerfilRoute
   '/scripts': typeof ScriptsRoute
+  '/terminal': typeof TerminalRoute
   '/trending': typeof TrendingRoute
   '/api/chat': typeof ApiChatRoute
   '/api/generate-ad': typeof ApiGenerateAdRoute
   '/api/generate-script': typeof ApiGenerateScriptRoute
+  '/api/terminal': typeof ApiTerminalRoute
   '/conselho/$threadId': typeof ConselhoThreadIdRoute
   '/conselho': typeof ConselhoIndexRoute
 }
@@ -145,10 +161,12 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/perfil': typeof PerfilRoute
   '/scripts': typeof ScriptsRoute
+  '/terminal': typeof TerminalRoute
   '/trending': typeof TrendingRoute
   '/api/chat': typeof ApiChatRoute
   '/api/generate-ad': typeof ApiGenerateAdRoute
   '/api/generate-script': typeof ApiGenerateScriptRoute
+  '/api/terminal': typeof ApiTerminalRoute
   '/conselho/$threadId': typeof ConselhoThreadIdRoute
   '/conselho/': typeof ConselhoIndexRoute
 }
@@ -164,10 +182,12 @@ export interface FileRouteTypes {
     | '/login'
     | '/perfil'
     | '/scripts'
+    | '/terminal'
     | '/trending'
     | '/api/chat'
     | '/api/generate-ad'
     | '/api/generate-script'
+    | '/api/terminal'
     | '/conselho/$threadId'
     | '/conselho/'
   fileRoutesByTo: FileRoutesByTo
@@ -180,10 +200,12 @@ export interface FileRouteTypes {
     | '/login'
     | '/perfil'
     | '/scripts'
+    | '/terminal'
     | '/trending'
     | '/api/chat'
     | '/api/generate-ad'
     | '/api/generate-script'
+    | '/api/terminal'
     | '/conselho/$threadId'
     | '/conselho'
   id:
@@ -197,10 +219,12 @@ export interface FileRouteTypes {
     | '/login'
     | '/perfil'
     | '/scripts'
+    | '/terminal'
     | '/trending'
     | '/api/chat'
     | '/api/generate-ad'
     | '/api/generate-script'
+    | '/api/terminal'
     | '/conselho/$threadId'
     | '/conselho/'
   fileRoutesById: FileRoutesById
@@ -215,10 +239,12 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   PerfilRoute: typeof PerfilRoute
   ScriptsRoute: typeof ScriptsRoute
+  TerminalRoute: typeof TerminalRoute
   TrendingRoute: typeof TrendingRoute
   ApiChatRoute: typeof ApiChatRoute
   ApiGenerateAdRoute: typeof ApiGenerateAdRoute
   ApiGenerateScriptRoute: typeof ApiGenerateScriptRoute
+  ApiTerminalRoute: typeof ApiTerminalRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -286,6 +312,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ScriptsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/terminal': {
+      id: '/terminal'
+      path: '/terminal'
+      fullPath: '/terminal'
+      preLoaderRoute: typeof TerminalRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/trending': {
       id: '/trending'
       path: '/trending'
@@ -312,6 +345,13 @@ declare module '@tanstack/react-router' {
       path: '/api/generate-script'
       fullPath: '/api/generate-script'
       preLoaderRoute: typeof ApiGenerateScriptRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/terminal': {
+      id: '/api/terminal'
+      path: '/api/terminal'
+      fullPath: '/api/terminal'
+      preLoaderRoute: typeof ApiTerminalRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/conselho/': {
@@ -355,10 +395,12 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   PerfilRoute: PerfilRoute,
   ScriptsRoute: ScriptsRoute,
+  TerminalRoute: TerminalRoute,
   TrendingRoute: TrendingRoute,
   ApiChatRoute: ApiChatRoute,
   ApiGenerateAdRoute: ApiGenerateAdRoute,
   ApiGenerateScriptRoute: ApiGenerateScriptRoute,
+  ApiTerminalRoute: ApiTerminalRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Calculator, Megaphone, MessagesSquare, Users, TrendingUp, Search, Command, BrainCircuit,
   BarChart3, Wallet, Receipt, Scale, CheckSquare, PieChart as PieIcon, Package, Truck, Target, Sliders, ShieldAlert,
   Compass, Calendar, AlertTriangle, Star, Bell, FileText, BookOpen, Settings, ChevronDown, ChevronRight, Gauge,
-  LogIn, LogOut, User
+  LogIn, LogOut, User, Terminal
 } from "lucide-react";
 import { CommandDialog, CommandInput, CommandList, CommandItem, CommandEmpty, CommandGroup } from "@/components/ui/command";
 import { products } from "@/lib/data";
@@ -16,6 +16,7 @@ import { toast } from "sonner";
 const operacaoNav = [
   { to: "/", label: "Central", icon: LayoutDashboard },
   { to: "/inteligencia", label: "Inteligência", icon: BrainCircuit },
+  { to: "/terminal", label: "Terminal Claude", icon: Terminal },
   { to: "/calculadora", label: "Calculadora", icon: Calculator },
   { to: "/anuncios", label: "Anúncios", icon: Megaphone },
   { to: "/scripts", label: "Scripts", icon: MessagesSquare },

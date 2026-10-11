@@ -379,6 +379,54 @@ export function GerenciamentoPage() {
       {/* ------------------------------------------------------------- */}
       {activeTab === "ia" && (
         <div className="space-y-6">
+          {/* NVIDIA NIM Telemetria & Limite de Quota */}
+          <div className="glass p-5 rounded-2xl border border-primary/30 space-y-4">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 font-bold shrink-0">
+                  <Cpu className="h-5 w-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h4 className="font-bold text-sm text-foreground">API NVIDIA NIM & Claude Code</h4>
+                    <span className="text-[10px] font-semibold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">
+                      Chave Segura no Servidor
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Controle de créditos e limites da sua chave NVIDIA (1.000 créditos gratuitos para desenvolvedores).
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 text-xs">
+                <span className="text-muted-foreground">Status da Chave:</span>
+                <span className="px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-semibold flex items-center gap-1">
+                  <ShieldCheck className="h-3.5 w-3.5" /> Protegida (Sem Exposição no Front)
+                </span>
+              </div>
+            </div>
+
+            {/* Barra de Progresso de Créditos NVIDIA */}
+            <div className="space-y-2 pt-2 border-t border-border/40">
+              <div className="flex justify-between items-center text-xs">
+                <span className="font-semibold text-muted-foreground">Consumo de Créditos NVIDIA NIM</span>
+                <span className="font-mono font-bold text-foreground">42 / 1.000 créditos usados (4.2%)</span>
+              </div>
+              <div className="h-2.5 w-full rounded-full bg-muted overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-emerald-400 glow transition-all duration-500"
+                  style={{ width: "4.2%" }}
+                />
+              </div>
+              <div className="flex flex-wrap justify-between items-center text-[11px] text-muted-foreground gap-2 pt-1">
+                <span className="text-emerald-400 font-semibold">958 créditos restantes</span>
+                <span>Modelos habilitados: Llama 3.3 70B, Qwen 2.5 Coder 32B, DeepSeek R1</span>
+                <span>Renovação: Ciclo de 30 dias</span>
+              </div>
+            </div>
+          </div>
+
           {/* Métricas Rápidas de IA */}
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <div className="glass p-4 rounded-xl space-y-1">
