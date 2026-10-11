@@ -134,13 +134,17 @@ export const Route = createFileRoute("/api/chat")({
               const stream = createUIMessageStream({
                 execute: async ({ writer }) => {
                   writer.write({ type: "start" });
+                  writer.write({ type: "start-step" });
+                  writer.write({ type: "text-start", id: textId });
                   const chunkSize = 25;
                   for (let i = 0; i < reply.length; i += chunkSize) {
                     const chunk = reply.slice(i, i + chunkSize);
                     writer.write({ type: "text-delta", id: textId, delta: chunk });
                     await new Promise((r) => setTimeout(r, 15));
                   }
-                  writer.write({ type: "finish" });
+                  writer.write({ type: "text-end", id: textId });
+                  writer.write({ type: "finish-step" });
+                  writer.write({ type: "finish", finishReason: "stop" });
                 },
               });
 
@@ -261,13 +265,17 @@ Exija gravação de tela de quem compra, não libere credenciais antes da confir
         const stream = createUIMessageStream({
           execute: async ({ writer }) => {
             writer.write({ type: "start" });
+            writer.write({ type: "start-step" });
+            writer.write({ type: "text-start", id: textId });
             const chunkSize = 20;
             for (let i = 0; i < simulatedResponse.length; i += chunkSize) {
               const chunk = simulatedResponse.slice(i, i + chunkSize);
               writer.write({ type: "text-delta", id: textId, delta: chunk });
-              await new Promise((r) => setTimeout(r, 20));
+              await new Promise((r) => setTimeout(r, 15));
             }
-            writer.write({ type: "finish" });
+            writer.write({ type: "text-end", id: textId });
+            writer.write({ type: "finish-step" });
+            writer.write({ type: "finish", finishReason: "stop" });
           },
         });
 
