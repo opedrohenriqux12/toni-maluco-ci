@@ -98,7 +98,62 @@ export const Route = createFileRoute("/api/chat")({
         const lastTextMsg = lastMsg ? lastMsg.parts.map((p) => (p.type === "text" ? p.text : "")).join(" ") : "";
         const promptInstruction = buildCouncilPrompt(lastTextMsg, body.mode ?? "individual", body.active ?? []);
 
-        // 1. Provedor NVIDIA NIM
+        // 1. Provedor OpenRouter (Prioridade 1: Roteador inteligente de modelos ou DeepSeek)
+        if (openRouterKey) {
+          try {
+            const cleanRouterKey = openRouterKey.trim().replace(/^['"]|['"]$/g, "");
+            const provider = createOpenAI({
+              apiKey: cleanRouterKey,
+              baseURL: "https://openrouter.ai/api/v1",
+              headers: {
+                "HTTP-Referer": "https://tonimaluco.com",
+                "X-Title": "Toni Maluco Conselho",
+              },
+            });
+
+            // Tenta o roteador gratuito ou deepseek/deepseek-r1:free
+            const result = streamText({
+              model: provider("openrouter/free"),
+              instructions: promptInstruction,
+              messages: await convertToModelMessages(messages),
+              abortSignal: request.signal,
+            });
+
+            return result.toUIMessageStreamResponse({
+              originalMessages: messages,
+              headers: {
+                "X-Provider-Used": "openrouter-free",
+              },
+            });
+          } catch (openRouterErr) {
+            console.error("OpenRouter primary failed, trying deepseek fallback:", openRouterErr);
+            try {
+              const cleanRouterKey = openRouterKey.trim().replace(/^['"]|['"]$/g, "");
+              const provider = createOpenAI({
+                apiKey: cleanRouterKey,
+                baseURL: "https://openrouter.ai/api/v1",
+              });
+
+              const result = streamText({
+                model: provider("deepseek/deepseek-r1:free"),
+                instructions: promptInstruction,
+                messages: await convertToModelMessages(messages),
+                abortSignal: request.signal,
+              });
+
+              return result.toUIMessageStreamResponse({
+                originalMessages: messages,
+                headers: {
+                  "X-Provider-Used": "openrouter-deepseek",
+                },
+              });
+            } catch (err2) {
+              console.error("OpenRouter fallback failed:", err2);
+            }
+          }
+        }
+
+        // 2. Provedor NVIDIA NIM (Secundário)
         if (nvidiaKey) {
           try {
             const cleanKey = nvidiaKey.trim().replace(/^['"]|['"]$/g, "");
@@ -107,9 +162,9 @@ export const Route = createFileRoute("/api/chat")({
               content: m.parts.map((p) => (p.type === "text" ? p.text : "")).join(" "),
             }));
 
-            // Payload oficial conforme especificação NVIDIA NIM Nemotron Reasoning
+            // Tenta Llama 3.3 70B da NVIDIA
             const nvidiaRes = await fetch("https://integrate.api.nvidia.com/v1/chat/completions", {
-              signal: AbortSignal.timeout(30000),
+              signal: AbortSignal.timeout(20000),
               method: "POST",
               headers: {
                 "Content-Type": "application/json",
@@ -117,13 +172,12 @@ export const Route = createFileRoute("/api/chat")({
                 "Accept": "application/json",
               },
               body: JSON.stringify({
-                model: "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+                model: "meta/llama-3.3-70b-instruct",
                 messages: [
                   { role: "system", content: promptInstruction },
                   ...conversationMessages,
                 ],
-                max_tokens: 4096,
-                reasoning_budget: 2048,
+                max_tokens: 2048,
                 temperature: 0.6,
                 top_p: 0.95,
                 stream: false,
@@ -156,39 +210,14 @@ export const Route = createFileRoute("/api/chat")({
                 return createUIMessageStreamResponse({
                   stream,
                   headers: {
-                    "X-Provider-Used": "nvidia-nim",
+                    "X-Provider-Used": "nvidia-llama-3.3",
                   },
                 });
               }
-            } else {
-              const errBody = await nvidiaRes.text();
-              console.error(`NVIDIA NIM returned status ${nvidiaRes.status}: ${errBody}`);
             }
           } catch (e) {
             console.error("NVIDIA NIM council error:", e);
           }
-        }
-
-        // 2. Provedor OpenRouter (DeepSeek R1 / Grátis)
-        if (openRouterKey) {
-          const provider = createOpenAI({
-            apiKey: openRouterKey,
-            baseURL: "https://openrouter.ai/api/v1",
-          });
-
-          const result = streamText({
-            model: provider("deepseek/deepseek-r1:free"),
-            instructions: promptInstruction,
-            messages: await convertToModelMessages(messages),
-            abortSignal: request.signal,
-          });
-
-          return result.toUIMessageStreamResponse({
-            originalMessages: messages,
-            headers: {
-              "X-Provider-Used": "openrouter-free",
-            },
-          });
         }
 
         // 3. Provedor OpenAI
@@ -212,73 +241,7 @@ export const Route = createFileRoute("/api/chat")({
           });
         }
 
-        // 4. Se o Nemotron 30B falhar ou demorar, tenta meta/llama-3.3-70b-instruct pela NVIDIA
-        if (nvidiaKey) {
-          try {
-            const cleanKey = nvidiaKey.trim().replace(/^['"]|['"]$/g, "");
-            const conversationMessages = messages.slice(-6).map((m) => ({
-              role: m.role === "assistant" ? "assistant" : "user",
-              content: m.parts.map((p) => (p.type === "text" ? p.text : "")).join(" "),
-            }));
 
-            const llamaRes = await fetch("https://integrate.api.nvidia.com/v1/chat/completions", {
-              signal: AbortSignal.timeout(20000),
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                "Authorization": `Bearer ${cleanKey}`,
-                "Accept": "application/json",
-              },
-              body: JSON.stringify({
-                model: "meta/llama-3.3-70b-instruct",
-                messages: [
-                  { role: "system", content: promptInstruction },
-                  ...conversationMessages,
-                ],
-                max_tokens: 2048,
-                temperature: 0.6,
-                top_p: 0.95,
-                stream: false,
-              }),
-            });
-
-            if (llamaRes.ok) {
-              const lData = await llamaRes.json();
-              const reply = lData.choices?.[0]?.message?.content || "";
-              if (reply && reply.trim().length > 0) {
-                const textId = generateUUID();
-                const stream = createUIMessageStream({
-                  execute: async ({ writer }) => {
-                    writer.write({ type: "start" });
-                    writer.write({ type: "start-step" });
-                    writer.write({ type: "text-start", id: textId });
-                    const chunkSize = 25;
-                    for (let i = 0; i < reply.length; i += chunkSize) {
-                      const chunk = reply.slice(i, i + chunkSize);
-                      writer.write({ type: "text-delta", id: textId, delta: chunk });
-                      await new Promise((r) => setTimeout(r, 12));
-                    }
-                    writer.write({ type: "text-end", id: textId });
-                    writer.write({ type: "finish-step" });
-                    writer.write({ type: "finish", finishReason: "stop" });
-                  },
-                });
-
-                return createUIMessageStreamResponse({
-                  stream,
-                  headers: {
-                    "X-Provider-Used": "nvidia-llama-3.3",
-                  },
-                });
-              }
-            } else {
-              const lErr = await llamaRes.text();
-              console.error(`NVIDIA Llama fallback failed (${llamaRes.status}):`, lErr);
-            }
-          } catch (e) {
-            console.error("NVIDIA Llama fallback error:", e);
-          }
-        }
 
         // 5. Simulação Rica com Personalidades Fiéis aos Conselheiros
         const mode = body.mode ?? "individual";
