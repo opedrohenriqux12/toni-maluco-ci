@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import {
   Terminal as TerminalIcon, Play, Copy, Check, Trash2, Cpu,
   ShieldCheck, RefreshCw, Sparkles, Layers, ArrowRight, CornerDownLeft,
-  Folder, FolderPlus, Save, Bookmark
+  Folder, FolderPlus, Save, Bookmark, Clock
 } from "lucide-react";
 import { toast } from "sonner";
 import { recordAiCall, getTelemetryData } from "@/lib/telemetryStore";
