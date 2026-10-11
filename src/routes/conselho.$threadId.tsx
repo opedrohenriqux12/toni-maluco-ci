@@ -14,6 +14,7 @@ import { PromptInput, PromptInputFooter, PromptInputSubmit, PromptInputTextarea 
 import { Shimmer } from "@/components/ai-elements/shimmer";
 import { threadsKey } from "./conselho";
 import { generateUUID } from "@/lib/uuid";
+import { useCouncil } from "@/lib/councilContext";
 import { useAuth } from "@/hooks/useAuth";
 import { getProjects, saveOrUpdateSession, getSavedSessions, createProject, type ProjectFolder } from "@/lib/projectStore";
 
@@ -66,8 +67,7 @@ function ThreadPage() {
 
 function ChatWindow({ threadId, user, initial }: { threadId: string; user: any | null; initial: UIMessage[] }) {
   const qc = useQueryClient();
-  const [mode, setMode] = useState<CouncilMode>("geral");
-  const [active, setActive] = useState<Set<string>>(new Set(advisors.map((a) => a.id)));
+  const { mode, setMode, activeAdvisors } = useCouncil();
   const [text, setText] = useState("");
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -170,7 +170,7 @@ function ChatWindow({ threadId, user, initial }: { threadId: string; user: any |
       const current: UIMessage[] = stored ? JSON.parse(stored) : [];
       localStorage.setItem(`council_messages_${threadId}`, JSON.stringify([...current, userMessage]));
     }
-    sendMessage({ text: currentText }, { body: { threadId, mode, active: [...active] } });
+    sendMessage({ text: currentText }, { body: { threadId, mode, active: [...activeAdvisors] } });
     inputRef.current?.focus();
   };
 

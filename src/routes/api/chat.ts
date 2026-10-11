@@ -1,10 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { createClient } from "@supabase/supabase-js";
 import { createOpenAI } from "@ai-sdk/openai";
-import { convertToModelMessages, streamText, type UIMessage } from "ai";
+import { convertToModelMessages, streamText, createUIMessageStream, createUIMessageStreamResponse, type UIMessage } from "ai";
 import type { Database, Json } from "@/integrations/supabase/types";
 import { buildCouncilPrompt, type CouncilMode } from "@/lib/council-prompt";
-import { advisors } from "@/lib/data";
+import { advisors, type Advisor } from "@/lib/data";
 import { generateUUID } from "@/lib/uuid";
 
 const json = (status: number, body: unknown) =>
@@ -22,27 +22,28 @@ export const Route = createFileRoute("/api/chat")({
         if (authHeader) {
           try {
             const token = authHeader.replace(/^Bearer\s+/i, "");
-            const url = process.env["SUPABASE_URL"]!;
-            const key = process.env["SUPABASE_PUBLISHABLE_KEY"]!;
-            const potentialClient = createClient<Database>(url, key, {
-              auth: { persistSession: false, autoRefreshToken: false },
-              global: {
-                fetch: (input, init) => {
-                  const h = new Headers(init?.headers);
-                  h.set("apikey", key);
-                  h.set("Authorization", `Bearer ${token}`);
-                  return fetch(input, { ...init, headers: h });
+            const url = process.env["SUPABASE_URL"] || process.env["VITE_SUPABASE_URL"];
+            const key = process.env["SUPABASE_PUBLISHABLE_KEY"] || process.env["VITE_SUPABASE_PUBLISHABLE_KEY"];
+            if (url && key) {
+              const potentialClient = createClient<Database>(url, key, {
+                auth: { persistSession: false, autoRefreshToken: false },
+                global: {
+                  fetch: (input, init) => {
+                    const h = new Headers(init?.headers);
+                    h.set("apikey", key);
+                    h.set("Authorization", `Bearer ${token}`);
+                    return fetch(input, { ...init, headers: h });
+                  },
                 },
-              },
-            });
-            const { data: userData, error: userErr } = await potentialClient.auth.getUser(token);
-            if (!userErr && userData.user) {
-              userId = userData.user.id;
-              supabaseClient = potentialClient;
+              });
+              const { data: userData, error: userErr } = await potentialClient.auth.getUser(token);
+              if (!userErr && userData.user) {
+                userId = userData.user.id;
+                supabaseClient = potentialClient;
+              }
             }
           } catch (e) {
             console.error("Failed to create Supabase client:", e);
-            // supabaseClient remains null
           }
         }
 
@@ -55,54 +56,49 @@ export const Route = createFileRoute("/api/chat")({
         const messages = Array.isArray(body.messages) ? body.messages : [];
         if (!body.threadId || !messages.length) return json(400, { error: "Pedido inválido." });
 
-        // Validate thread exists (optional: we could skip this and allow any threadId)
-        if (supabaseClient) {
-          const { data: thread, error: threadErr } = await supabaseClient
-            .from("council_threads")
-            .select("id, title")
-            .eq("id", body.threadId)
-            .maybeSingle();
-          if (threadErr || !thread) return json(404, { error: "Conversa não encontrada." });
+        // Garante que a thread exista no Supabase se o usuário estiver autenticado (sem travar com 404)
+        if (supabaseClient && userId) {
+          try {
+            await supabaseClient
+              .from("council_threads")
+              .upsert({ id: body.threadId, user_id: userId, title: "Nova conversa" }, { onConflict: "id" });
+          } catch (err) {
+            console.warn("Could not upsert thread in Supabase:", err);
+          }
         }
 
-        // Save user message if we have a user and supabase client
+        // Salva mensagem do usuário se estiver autenticado
         const last = messages[messages.length - 1]!;
         if (userId && supabaseClient && last.role === "user") {
-          const lastText = last.parts
-            .map((p) => (p.type === "text" ? p.text : ""))
-            .join(" ")
-            .trim();
+          try {
+            const lastText = last.parts
+              .map((p) => (p.type === "text" ? p.text : ""))
+              .join(" ")
+              .trim();
 
-          const { error } = await supabaseClient.from("council_messages").upsert(
-            { thread_id: body.threadId, user_id: userId, sdk_id: last.id, role: "user", parts: last.parts as unknown as Json },
-            { onConflict: "thread_id,sdk_id" },
-          );
-          if (error) {
-            console.error("save user message", error);
-            return json(500, { error: "Não foi possível salvar sua mensagem." });
-          }
-          const patch: { updated_at: string; title?: string } = { updated_at: new Date().toISOString() };
-          if (supabaseClient) {
+            await supabaseClient.from("council_messages").upsert(
+              { thread_id: body.threadId, user_id: userId, sdk_id: last.id, role: "user", parts: last.parts as unknown as Json },
+              { onConflict: "thread_id,sdk_id" },
+            );
+
+            const patch: { updated_at: string; title?: string } = { updated_at: new Date().toISOString() };
             const { data: threadData } = await supabaseClient.from("council_threads").select("title").eq("id", body.threadId).maybeSingle();
             if (threadData && threadData.title === "Nova conversa" && lastText) patch.title = lastText.slice(0, 60);
             await supabaseClient.from("council_threads").update(patch).eq("id", body.threadId);
+          } catch (err) {
+            console.error("Error saving user message to Supabase:", err);
           }
         }
 
-        // Engine de Inteligência Artificial do Conselho:
-        // 1. NVIDIA NIM (Nemotron 30B) se disponível
-        // 2. OpenRouter (DeepSeek R1 / Grátis)
-        // 3. OpenAI (se chave fornecida)
-        // 4. Simulação rica local
         const nvidiaKey = process.env["NVIDIA_API_KEY"];
         const openRouterKey = process.env["OPENROUTER_API_KEY"];
         const openAiKey = process.env["OPENAI_API_KEY"];
 
         const lastMsg = messages[messages.length - 1];
         const lastTextMsg = lastMsg ? lastMsg.parts.map((p) => (p.type === "text" ? p.text : "")).join(" ") : "";
-        const promptInstruction = buildCouncilPrompt(lastTextMsg, body.mode ?? "geral", body.active ?? []);
+        const promptInstruction = buildCouncilPrompt(lastTextMsg, body.mode ?? "individual", body.active ?? []);
 
-        // 1. NVIDIA NIM
+        // 1. Provedor NVIDIA NIM
         if (nvidiaKey) {
           try {
             const nvidiaRes = await fetch("https://integrate.api.nvidia.com/v1/chat/completions", {
@@ -132,39 +128,34 @@ export const Route = createFileRoute("/api/chat")({
             if (nvidiaRes.ok) {
               const nData = await nvidiaRes.json();
               const reply = nData.choices?.[0]?.message?.content || "[Sem resposta gerada pelo conselho]";
+              const textId = generateUUID();
 
-              const stream = new ReadableStream({
-                async start(controller) {
+              const stream = createUIMessageStream({
+                execute: async ({ writer }) => {
+                  writer.write({ type: "start" });
                   const chunkSize = 25;
                   for (let i = 0; i < reply.length; i += chunkSize) {
                     const chunk = reply.slice(i, i + chunkSize);
-                    const messageChunk = {
-                      id: generateUUID(),
-                      role: "assistant",
-                      content: chunk,
-                      parts: [{ type: "text", text: chunk }],
-                    };
-                    controller.enqueue(new TextEncoder().encode(JSON.stringify(messageChunk) + "\n"));
-                    await new Promise((r) => setTimeout(r, 20));
+                    writer.write({ type: "text-delta", id: textId, delta: chunk });
+                    await new Promise((r) => setTimeout(r, 15));
                   }
-                  controller.close();
+                  writer.write({ type: "finish" });
                 },
               });
 
-              return new Response(stream, {
+              return createUIMessageStreamResponse({
+                stream,
                 headers: {
-                  "Content-Type": "text/plain; charset=utf-8",
                   "X-Provider-Used": "nvidia-nim",
                 },
               });
             }
           } catch (e) {
             console.error("NVIDIA NIM council error", e);
-            // Fall through to try the next provider
           }
         }
 
-        // 2. OpenRouter (DeepSeek R1 / Free)
+        // 2. Provedor OpenRouter (DeepSeek R1 / Grátis)
         if (openRouterKey) {
           const provider = createOpenAI({
             apiKey: openRouterKey,
@@ -178,19 +169,15 @@ export const Route = createFileRoute("/api/chat")({
             abortSignal: request.signal,
           });
 
-          const stream = result.toUIMessageStream({
+          return result.toUIMessageStreamResponse({
             originalMessages: messages,
-          });
-
-          return new Response(stream, {
             headers: {
-              "Content-Type": "text/plain; charset=utf-8",
               "X-Provider-Used": "openrouter-free",
             },
           });
         }
 
-        // 3. OpenAI
+        // 3. Provedor OpenAI
         if (openAiKey) {
           const provider = createOpenAI({
             apiKey: openAiKey,
@@ -203,141 +190,90 @@ export const Route = createFileRoute("/api/chat")({
             abortSignal: request.signal,
           });
 
-          const stream = result.toUIMessageStream({
+          return result.toUIMessageStreamResponse({
             originalMessages: messages,
-          });
-
-          return new Response(stream, {
             headers: {
-              "Content-Type": "text/plain; charset=utf-8",
               "X-Provider-Used": "openai",
             },
           });
         }
 
-        // 4. Simulação rica local
-        const activeAdvisors = advisors.filter((a) => body.active?.includes(a.id) ?? false);
+        // 4. Simulação Rica com Personalidades Fiéis aos Conselheiros
+        const mode = body.mode ?? "individual";
+        const requestedActive = body.active && body.active.length > 0 ? body.active : ["lucia"];
+        const activeAdvisors = advisors.filter((a) => requestedActive.includes(a.id));
 
-        // Import the style object for proper personality simulation
-        const style: Record<string, string> = {
-          helena: "Fala seco, em números. Sempre calcula margem líquida, capital empatado e tempo de retorno. Desconfia de qualquer plano sem fluxo de caixa.",
-          rafael: "Calmo e preciso. Aponta riscos de termos de uso das plataformas, CDC, LGPD, marca e enquadramento fiscal (MEI/Simples). Nunca dá certeza jurídica absoluta; recomenda advogado quando necessário.",
-          bruno: "Pragmático. Sugere a automação mais simples possível (planilha, Zapier, script) e corta complexidade inútil.",
-          icaro: "Analítico e ácido. Questiona amostras pequenas, médias enganosas e previsões sem base. Fala em intervalos e probabilidades.",
-          marina: "Enérgica, foca em conversão: título, copy, prova social, oferta e canal. Dá exemplos prontos de texto.",
-          ze: "Veterano desconfiado, fala simples e direto. Foca em golpe, chargeback, banimento, fornecedor e entrega.",
-          lucia: "Advogada do diabo. Ataca a premissa do usuário, aponta viés e FOMO, e faz a pergunta incômoda.",
-        };
+        const defaultAdvisor = advisors.find((a) => a.id === "lucia") || advisors[0]!;
+        let advisorsToShow: Advisor[] = activeAdvisors.length > 0 ? activeAdvisors : [defaultAdvisor];
+
+        if (mode === "individual") {
+          // No modo Individual, apenas o conselheiro selecionado fala
+          advisorsToShow = [advisorsToShow[0] || defaultAdvisor];
+        }
 
         let simulatedResponse = "";
-          if (activeAdvisors.length === 0) {
-            simulatedResponse = `Como um conselho simulado, recebi sua mensagem: "${lastTextMsg}". Sem conselheiros específicos selecionados, ofereço uma reflexão geral: considere o contexto, seus objetivos e os possíveis impactos de suas decisões.`;
+        advisorsToShow.forEach((advisor) => {
+          simulatedResponse += `### ${advisor.short} — ${advisor.area}\n`;
+          simulatedResponse += `*${advisor.persona}*\n\n`;
+
+          if (advisor.id === "lucia") {
+            simulatedResponse += `Você disse: "${lastTextMsg}". Mas você realmente tem certeza disso ou é só o viés de confirmação e FOMO falando mais alto? 
+
+Qual é a premissa oculta que você está ignorando deliberadamente? Se a plataforma mudar o algoritmo de reputação ou travar as contas amanhã de manhã, qual é o seu plano B de sobrevivência imediata? Se você não tiver essa resposta na ponta da língua, você está apenas apostando e fingindo que é estratégia.`;
+          } else if (advisor.id === "helena") {
+            simulatedResponse += `Vamos direto aos números de "${lastTextMsg}". Qual é a margem líquida real após a retenção da plataforma (12%) e a taxa de saque (2.5%)? 
+
+Sem um cálculo rigoroso de fluxo de caixa e giro desse capital em no máximo 5 dias, esse movimento é financeiramente suicida. Dinheiro parado em produto digital é risco puro de desvalorização. Apresente a planilha detalhada antes de colocar um centavo a mais.`;
+          } else if (advisor.id === "rafael") {
+            simulatedResponse += `Analisando juridicamente a questão de "${lastTextMsg}": as diretrizes dos marketplaces e os Termos de Uso das publicadoras não deixam margem para dúvida sobre a vedação à transferência de propriedade. 
+
+Além do risco de retenção preventiva de saldo pelo marketplace, você responde civilmente perante o Código de Defesa do Consumidor por vícios no produto. Recomendo alinhar estritamente os comunicados para não gerar expectativas não resguardadas em contrato.`;
+          } else if (advisor.id === "bruno") {
+            simulatedResponse += `Para resolver "${lastTextMsg}", corte toda a complexidade desnecessária. Não perca tempo montando microsserviço ou bot sofisticado agora. 
+
+Um script simples em Node.js ou um webhook consumindo a API com fallback já resolve 95% do gargalo. Se você demorar mais de duas horas automatizando isso antes de validar as primeiras vendas no braço, você está procrastinando com código.`;
+          } else if (advisor.id === "icaro") {
+            simulatedResponse += `Qual é o tamanho amostral e a distribuição estatística que sustentam "${lastTextMsg}"? Uma dezena de vendas não constitui um padrão estocástico confiável. 
+
+Qual é o desvio padrão dos preços concorrentes nas últimas semanas? Trabalhe com intervalos de confiança de 95% e métricas quantitativas reais em vez de confundir oscilação aleatória de curto prazo com tendência de mercado.`;
+          } else if (advisor.id === "marina") {
+            simulatedResponse += `O comprador de produto digital toma decisão em menos de 3 segundos com base em clareza e credibilidade. Para posicionar "${lastTextMsg}", o título precisa destacar o benefício direto (ex: "Entrega Automática 24/7 • Acesso Imediato • Suporte Vitalício"). 
+
+Adicione selos visuais na descrição, quebre objeções com um FAQ enxuto e utilize prova social com capturas reais de clientes satisfeitos. Deseja que eu elabore uma copy completa de conversão para essa oferta?`;
+          } else if (advisor.id === "ze") {
+            simulatedResponse += `Amigo, escuta quem já viu de tudo nessa praça: essa conversa de "${lastTextMsg}" tem cara de golpe que já vi acontecer dezenas de vezes. Fornecedor entrega o primeiro lote bonitinho e no terceiro desaparece com o saldo todo. 
+
+Exija gravação de tela de quem compra, não libere credenciais antes da confirmação do intermediador e jamais mantenha estoque concentrado num lugar só. Cautela é o que mantém a gente vivo aqui.`;
           } else {
-            // Apply council mode logic
-            const mode = body.mode ?? "geral";
-            let advisorsToShow = [...activeAdvisors];
-
-            if (mode === "individual") {
-              // Choose the single most qualified advisor based on routing
-              const r = buildCouncilPrompt(lastTextMsg, "geral", body.active ?? []); // Reuse routing logic
-              // Extract IDs from the reason (simplified)
-              const mentionedAdvisors = advisors.filter(a =>
-                lastTextMsg.toLowerCase().includes(a.short.toLowerCase()) ||
-                a.keywords.some(k => lastTextMsg.toLowerCase().includes(k.toLowerCase()))
-              );
-              if (mentionedAdvisors.length > 0) {
-                advisorsToShow = [mentionedAdvisors[0]];
-              } else if (activeAdvisors.length > 0) {
-                advisorsToShow = [activeAdvisors[0]];
-              } else {
-                advisorsToShow = [];
-              }
-              advisorsToShow = advisorsToShow.slice(0, 1);
-            } else if (mode === "war") {
-              // All active advisors participate in war room
-              advisorsToShow = [...activeAdvisors];
-            } else {
-              // geral mode: choose 1-2 most qualified based on routing
-              const r = buildCouncilPrompt(lastTextMsg, "geral", body.active ?? []);
-              // For simplicity in simulation, we'll show all active but note this is a simplification
-              advisorsToShow = [...activeAdvisors];
-            }
-
-            simulatedResponse = `Conselho simulado reunido para analisar: "${lastTextMsg}".\n\n`;
-            advisorsToShow.forEach((advisor) => {
-              simulatedResponse += `### ${advisor.short} — ${advisor.area}\n`;
-              simulatedResponse += `${advisor.persona}. `;
-
-              // Add personality-specific advice based on the style
-              const advisorStyle = style[advisor.id as keyof typeof style] || "";
-              if (advisorStyle) {
-                simulatedResponse += `${advisorStyle} `;
-              }
-
-              // Add contextual advice based on the message content
-              const lowerMsg = lastTextMsg.toLowerCase();
-              if (advisor.id === "helena") { // Financeiro
-                simulatedResponse += `Ao analisar "${lastTextMsg}", quero ver os números: qual é o investimento necessário, o retorno esperado e o prazo de payback? Sem margem líquida positiva e fluxo de caixa claro, não procede.`;
-              } else if (advisor.id === "rafael") { // Jurídico
-                simulatedResponse += `Precisamos verificar se "${lastTextMsg}" está em conformidade com os termos das plataformas envolvidas, bem como com o CDC e LGPD. Recomendo revisão jurídica antes de prosseguir.`;
-              } else if (advisor.id === "bruno") { // Automação
-                simulatedResponse += `Para "${lastTextMsg}", sugiro começar com a automação mais simples possível - talvez uma planilha ou um script básico. Evite over-engineering inicialmente.`;
-              } else if (advisor.id === "icaro") { // Estatística
-                simulatedResponse += `Quais são os dados que sustentam "${lastTextMsg}"? Preciso ver amostras suficientes e não ficar enganado por médias que não representam a realidade. Trabalhe com intervalos de confiança.`;
-              } else if (advisor.id === "marina") { // Marketing
-                simulatedResponse += `Como vamos vender "${lastTextMsg}"? Precisamos de um gancho forte, prova social e um chamado para ação claro. Vou te dar um exemplo de copy que converte.`;
-              } else if (advisor.id === "ze") { // Operação
-                simulatedResponse += `Já vi muita promessa como "${lastTextMsg}" acabar em golpe ou chargeback. Verifique bem o fornecedor, teste com pequeno lote primeiro e nunca confie apenas em promessas.`;
-              } else if (advisor.id === "lucia") { // Advogada do diabo
-                simulatedResponse += `Você realmente acredita que "${lastTextMsg}" vai funcionar? Qual o viés de confirmação que você não está vendo? E se der errado, qual o plano B?`;
-              } else {
-                // Fallback for any undefined advisors
-                simulatedResponse += `Refletindo sobre "${lastTextMsg}" na área de ${advisor.area}.`;
-              }
-
-              simulatedResponse += "\n\n";
-            });
-
-            if (mode === "war") {
-              simulatedResponse += "### Veredito do Conselho\nApós análise dos pontos de vista apresentados, o consenso é: é necessário avançar com cautela, validando cada pressuposto antes de investir recursos significativos. Próximo passo: coletar dados concretos para reduzir as incertezas identificadas.\n";
-            }
-
-            simulatedResponse += `\nLembre-se: o conselho é uma ferramenta de reflexão, não uma decisão final.`;
+            simulatedResponse += `Analisando criticamente "${lastTextMsg}". Pese os prós e contras objetivamente antes de avançar.`;
           }
 
-        // Create a readable stream that simulates streaming by sending the response in small chunks
-        const stream = new ReadableStream({
-          async start(controller) {
-            // Split into chunks of ~20 characters for a typing effect
+          simulatedResponse += "\n\n";
+        });
+
+        if (mode === "war") {
+          simulatedResponse += `### Veredito do Conselho\n**Decisão:** TESTAR com lote reduzido e validação rigorosa de margem e segurança.\n**Próximo Passo:** Mapear o custo unitário e colher dados empíricos antes de escalar a operação.`;
+        }
+
+        // Stream padrão UIMessage SSE do AI SDK
+        const textId = generateUUID();
+        const stream = createUIMessageStream({
+          execute: async ({ writer }) => {
+            writer.write({ type: "start" });
             const chunkSize = 20;
             for (let i = 0; i < simulatedResponse.length; i += chunkSize) {
               const chunk = simulatedResponse.slice(i, i + chunkSize);
-
-              // Create a UIMessage chunk
-              const messageChunk = {
-                id: generateUUID(),
-                role: "assistant",
-                content: chunk,
-                parts: [{ type: "text", text: chunk }]
-              };
-
-              // Encode as JSON lines format (similar to what AI SDK expects)
-              const encoded = new TextEncoder().encode(JSON.stringify(messageChunk) + "\n");
-              controller.enqueue(encoded);
-
-              // Small delay to simulate typing
-              await new Promise(resolve => setTimeout(resolve, 30));
+              writer.write({ type: "text-delta", id: textId, delta: chunk });
+              await new Promise((r) => setTimeout(r, 20));
             }
-
-            // Signal end of stream
-            controller.close();
-          }
+            writer.write({ type: "finish" });
+          },
         });
 
-        return new Response(stream, {
+        return createUIMessageStreamResponse({
+          stream,
           headers: {
-            "Content-Type": "text/plain; charset=utf-8",
-            "X-Provider-Used": "conselho-offline-simulation"
+            "X-Provider-Used": "conselho-offline-simulation",
           },
         });
       },

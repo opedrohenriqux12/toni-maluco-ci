@@ -9,6 +9,7 @@ import { createFileRoute, Link, Outlet, useNavigate } from "@tanstack/react-rout
   import { advisors } from "@/lib/data";
   import { generateUUID } from "@/lib/uuid";
 
+import { CouncilProvider, useCouncil } from "@/lib/councilContext";
 import { getProjects, getSavedSessions, type ProjectFolder, type SavedSession } from "@/lib/projectStore";
 
 export const Route = createFileRoute("/conselho")({
@@ -22,7 +23,11 @@ export const Route = createFileRoute("/conselho")({
       { name: "twitter:card", content: "summary" },
     ],
   }),
-  component: ConsiglioLayout,
+  component: () => (
+    <CouncilProvider>
+      <ConsiglioLayout />
+    </CouncilProvider>
+  ),
 });
 
 export const threadsKey = ["council-threads"] as const;
@@ -31,19 +36,10 @@ function ConsiglioLayout() {
   const { user, loading } = useAuth();
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const { activeAdvisors, toggleAdvisor, mode } = useCouncil();
   const [localThreads, setLocalThreads] = useState<Array<{ id: string; title: string; updated_at: string; projectId?: string | undefined }>>([]);
-  const [activeAdvisors, setActiveAdvisors] = useState<Set<string>>(new Set(advisors.map((a) => a.id)));
   const [projects, setProjects] = useState<ProjectFolder[]>(() => getProjects());
   const [selectedFolderFilter, setSelectedFolderFilter] = useState<string | null>(null);
-
-  const toggleAdvisor = (id: string) => {
-    setActiveAdvisors((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
 
   // Carrega threads do localStorage / projectStore
   const loadStoredThreads = () => {
