@@ -102,6 +102,7 @@ export const Route = createFileRoute("/api/chat")({
         if (nvidiaKey) {
           try {
             const nvidiaRes = await fetch("https://integrate.api.nvidia.com/v1/chat/completions", {
+              signal: AbortSignal.timeout(8000),
               method: "POST",
               headers: {
                 "Content-Type": "application/json",
