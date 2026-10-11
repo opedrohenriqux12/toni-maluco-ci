@@ -33,7 +33,16 @@ export function XRadarSection({ onTransformToOpportunity }: XRadarSectionProps) 
     if (typeof window === "undefined") return initialXConfig;
     const saved = localStorage.getItem("trending_x_config_v2");
     if (saved) {
-      try { return JSON.parse(saved); } catch (e) { console.error(e); }
+      try { 
+        const parsed = JSON.parse(saved);
+        // Guarantee fallback to @originalph06 if previous placeholder was saved
+        if (!parsed.connectedHandle || parsed.connectedHandle === "@pedro_ci_ops") {
+          return { ...parsed, connectedHandle: "@originalph06", userProfile: initialXConfig.userProfile };
+        }
+        return parsed;
+      } catch (e) { 
+        console.error(e); 
+      }
     }
     return initialXConfig;
   });
@@ -57,13 +66,46 @@ export function XRadarSection({ onTransformToOpportunity }: XRadarSectionProps) 
     }
   }, [config]);
 
-  // Sync feed simulation with fresh market signals
+  // Sync feed simulation with fresh market signals for the connected user handle
   const handleSyncFeed = () => {
     setIsSyncing(true);
+    const targetHandle = config.connectedHandle?.startsWith("@") ? config.connectedHandle : `@${config.connectedHandle || "originalph06"}`;
+    
     setTimeout(() => {
-      // Simulate real-time metric updates
-      setPosts((prev) =>
-        prev.map((p) => {
+      // Simulate real-time metric updates and append tailored opportunity for the user
+      setPosts((prev) => {
+        const hasUserPost = prev.some((p) => p.id === "x-post-ph06");
+        const userTailoredPost: XPostOpportunity = {
+          id: "x-post-ph06",
+          author: {
+            name: "PH | Radar Inteligente",
+            handle: targetHandle,
+            avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80",
+            verified: true,
+            badge: "Empreendedor Tech"
+          },
+          content: `Alerta sincronizado para ${targetHandle}: Elon Musk e xAI acabam de confirmar expansão de agentes de IA para e-commerce. Nichos de atendimento autônomo e precificação dinâmica em alta de 340% nesta semana.`,
+          publishedAt: "agora mesmo",
+          timestamp: new Date().toISOString(),
+          metrics: {
+            likes: 420,
+            reposts: 95,
+            replies: 28,
+            views: "18.4K",
+            viralVelocity: "Explodindo (+500/min)"
+          },
+          category: "ai_trends",
+          aiAnalysis: {
+            thesis: `Oportunidade personalizada para a conta ${targetHandle}: Criar microsserviço de automação com Grok / DeepSeek para lojistas de marketplace.`,
+            monetizationPotential: "Altíssimo",
+            marketNiche: "Automação de E-commerce & Vendas Digitais",
+            actionPlan: `Disparar script de captação de leads e conectar ao Conselho Estratégico para monetizar em até 7 dias.`,
+            estimatedProfitBrl: "R$ 7.500 a R$ 18.000 / mês"
+          },
+          relatedUrl: `https://x.com/${targetHandle.replace("@", "")}`
+        };
+
+        const updated = prev.map((p) => {
           if (p.category === "elon_musk") {
             return {
               ...p,
@@ -75,14 +117,30 @@ export function XRadarSection({ onTransformToOpportunity }: XRadarSectionProps) 
             };
           }
           return p;
-        })
-      );
-      setConfig((prev) => ({ ...prev, lastSyncedAt: new Date().toISOString() }));
-      setIsSyncing(false);
-      toast.success("Feed do X sincronizado em tempo real!", {
-        description: "6 novas oportunidades de IA detectadas nas últimas 2h.",
+        });
+
+        return hasUserPost ? updated : [userTailoredPost, ...updated];
       });
-    }, 1200);
+
+      setConfig((prev) => ({ 
+        ...prev, 
+        lastSyncedAt: new Date().toISOString(),
+        userProfile: {
+          name: `PH | ${targetHandle}`,
+          handle: targetHandle,
+          avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80",
+          followersCount: "1.240",
+          followingCount: "389",
+          bio: "Empreendedor digital & Tech Builder. Monitorando oportunidades de IA, Grok e novos modelos de negócios.",
+          status: "Sincronizado & Ativo"
+        }
+      }));
+
+      setIsSyncing(false);
+      toast.success(`Conta ${targetHandle} sincronizada com sucesso!`, {
+        description: "Feed do X atualizado em tempo real com novos insights e oportunidades mapeadas.",
+      });
+    }, 1000);
   };
 
   // Filter posts
@@ -157,6 +215,44 @@ export function XRadarSection({ onTransformToOpportunity }: XRadarSectionProps) 
           </div>
         </div>
 
+        {/* User Account Connected Card / Status */}
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-3 rounded-xl bg-card/40 border border-border/50 text-xs">
+          <div className="flex items-center gap-3">
+            <div className="relative">
+              <img 
+                src={config.userProfile?.avatar || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80"} 
+                alt={config.connectedHandle} 
+                className="h-8 w-8 rounded-full border border-primary/40 object-cover"
+              />
+              <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-emerald-500 border border-background" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-foreground text-xs">{config.connectedHandle}</span>
+                <span className="text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-1.5 py-0.2 rounded font-medium flex items-center gap-1">
+                  <CheckCircle2 className="h-2.5 w-2.5" /> Sincronizado & Ativo
+                </span>
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                Rastreando menções, feeds virais e oportunidades de IA direcionadas para seu perfil.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 self-end sm:self-center">
+            <span className="text-[10px] text-muted-foreground">
+              Última sincronização: {new Date(config.lastSyncedAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+            </span>
+            <button
+              onClick={handleSyncFeed}
+              disabled={isSyncing}
+              className="px-2.5 py-1 text-[11px] rounded-lg bg-primary/20 text-primary hover:bg-primary/30 font-semibold border border-primary/30 transition disabled:opacity-50"
+            >
+              Forçar Sincronização
+            </button>
+          </div>
+        </div>
+
         {/* Real-time KPI Stats Bar */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 border-t border-border/40 text-xs">
           <div className="p-2.5 rounded-xl bg-background/50 border border-border/40">
@@ -165,7 +261,7 @@ export function XRadarSection({ onTransformToOpportunity }: XRadarSectionProps) 
           </div>
           <div className="p-2.5 rounded-xl bg-background/50 border border-border/40">
             <p className="text-[10px] text-muted-foreground uppercase font-semibold">Oportunidades Filtradas</p>
-            <p className="text-lg font-bold text-emerald-400 mt-0.5">18 detectadas</p>
+            <p className="text-lg font-bold text-emerald-400 mt-0.5">{posts.length} ativas</p>
           </div>
           <div className="p-2.5 rounded-xl bg-background/50 border border-border/40">
             <p className="text-[10px] text-muted-foreground uppercase font-semibold">Hype Score IA</p>

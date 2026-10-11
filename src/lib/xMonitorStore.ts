@@ -38,10 +38,19 @@ export interface XAccountConfig {
   monitoringKeywords: string[];
   autoFilterAI: boolean;
   lastSyncedAt: string;
+  userProfile?: {
+    name: string;
+    handle: string;
+    avatar: string;
+    followersCount: string;
+    followingCount: string;
+    bio: string;
+    status: "Sincronizado & Ativo" | "Aguardando Sincronização";
+  };
 }
 
 export const initialXConfig: XAccountConfig = {
-  connectedHandle: "@pedro_ci_ops",
+  connectedHandle: "@originalph06",
   isConnected: true,
   apiKey: "x_live_auth_stream_active",
   monitoringKeywords: [
@@ -49,7 +58,16 @@ export const initialXConfig: XAccountConfig = {
     "SaaS AI", "Ecommerce viral", "Micro-SaaS", "DeepSeek", "Prompt Engineering"
   ],
   autoFilterAI: true,
-  lastSyncedAt: new Date().toISOString()
+  lastSyncedAt: new Date().toISOString(),
+  userProfile: {
+    name: "PH | @originalph06",
+    handle: "@originalph06",
+    avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80",
+    followersCount: "1.240",
+    followingCount: "389",
+    bio: "Empreendedor digital & Tech Builder. Monitorando oportunidades de IA, Grok e novos modelos de negócios.",
+    status: "Sincronizado & Ativo"
+  }
 };
 
 export const initialXPosts: XPostOpportunity[] = [
