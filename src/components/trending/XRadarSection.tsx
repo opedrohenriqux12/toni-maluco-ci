@@ -18,10 +18,10 @@ interface XRadarSectionProps {
 export function XRadarSection({ onTransformToOpportunity }: XRadarSectionProps) {
   const navigate = useNavigate();
 
-  // Posts State (Persistent localStorage)
+  // Posts State (Persistent localStorage v3)
   const [posts, setPosts] = useState<XPostOpportunity[]>(() => {
     if (typeof window === "undefined") return initialXPosts;
-    const saved = localStorage.getItem("trending_x_posts_v2");
+    const saved = localStorage.getItem("trending_x_posts_v3");
     if (saved) {
       try { return JSON.parse(saved); } catch (e) { console.error(e); }
     }
@@ -31,11 +31,10 @@ export function XRadarSection({ onTransformToOpportunity }: XRadarSectionProps) 
   // Config State
   const [config, setConfig] = useState<XAccountConfig>(() => {
     if (typeof window === "undefined") return initialXConfig;
-    const saved = localStorage.getItem("trending_x_config_v2");
+    const saved = localStorage.getItem("trending_x_config_v3");
     if (saved) {
       try { 
         const parsed = JSON.parse(saved);
-        // Guarantee fallback to @originalph06 if previous placeholder was saved
         if (!parsed.connectedHandle || parsed.connectedHandle === "@pedro_ci_ops") {
           return { ...parsed, connectedHandle: "@originalph06", userProfile: initialXConfig.userProfile };
         }
@@ -56,13 +55,13 @@ export function XRadarSection({ onTransformToOpportunity }: XRadarSectionProps) 
   // Sync to localStorage
   useEffect(() => {
     if (typeof window !== "undefined") {
-      localStorage.setItem("trending_x_posts_v2", JSON.stringify(posts));
+      localStorage.setItem("trending_x_posts_v3", JSON.stringify(posts));
     }
   }, [posts]);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
-      localStorage.setItem("trending_x_config_v2", JSON.stringify(config));
+      localStorage.setItem("trending_x_config_v3", JSON.stringify(config));
     }
   }, [config]);
 
