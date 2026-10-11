@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { recordAiCall, getTelemetryData } from "@/lib/telemetryStore";
+import { virtualOS, type VirtualFile } from "@/lib/virtualOS";
 
 export const Route = createFileRoute("/terminal")({
   head: () => ({
@@ -24,22 +25,26 @@ interface CommandOutput {
   response: string;
   timestamp: string;
   provider: string;
+  isExecutableCode?: boolean;
+  codeToRun?: string;
 }
 
 export function TerminalPage() {
   const [inputCommand, setInputCommand] = useState("");
   const [isRunning, setIsRunning] = useState(false);
+  const [virtualFiles, setVirtualFiles] = useState<VirtualFile[]>(() => virtualOS.listFiles());
   const [outputs, setOutputs] = useState<CommandOutput[]>([
     {
       id: "welcome-msg",
-      command: "init --claude-code --mode=ci-ops",
-      response: `[Claude Code Terminal v1.4] Inicializado com sucesso.
-✓ Backend seguro conectado (Vercel Edge / Node.js)
-✓ Suporte a chaves NVIDIA NIM e OpenRouter protegidas no servidor
-✓ Chaves NÃO expostas no front-end
-✓ Digite sua solicitação em linguagem natural ou comandos de script.`,
+      command: "init --claude-code --sandbox=webcontainer-os",
+      response: `[Claude Code Terminal v2.0 - WebContainer Sandbox Ativo]
+✓ Motor de Inteligência: NVIDIA NIM (Nemotron 30B / Qwen Coder)
+✓ Ambiente de Execução Real: WebContainer In-Browser (Linux/Node.js Virtual)
+✓ Custo Operacional: R$ 0,00 Permanente
+✓ Comandos locais suportados: ls, cat <file>, node <file>, pwd, rm <file>, clear
+✓ Comandos de IA: Peça scripts, bots ou análises e clique em [Executar Script no Sandbox]`,
       timestamp: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
-      provider: "Sistema Central",
+      provider: "Ambiente WebContainer",
     },
   ]);
   const [providerInfo, setProviderInfo] = useState<{
@@ -102,8 +107,15 @@ export function TerminalPage() {
     if (!cmd.trim() || isRunning) return;
 
     setInputCommand("");
-    setIsRunning(true);
+    const trimmed = cmd.trim();
 
+    // 1. Comando 'clear'
+    if (trimmed === "clear") {
+      setOutputs([]);
+      return;
+    }
+
+    setIsRunning(true);
     const newId = `cmd-${Date.now()}`;
     const newOutput: CommandOutput = {
       id: newId,
@@ -115,6 +127,29 @@ export function TerminalPage() {
 
     setOutputs((prev) => [...prev, newOutput]);
 
+    // 2. Se for um comando de shell local (ls, cat, node, pwd, whoami, rm, echo)
+    const firstWord = (trimmed.split(/\s+/)[0] || "").toLowerCase();
+    const localCommands = ["ls", "cat", "node", "pwd", "whoami", "date", "env", "rm", "echo", "run"];
+
+    if (localCommands.includes(firstWord)) {
+      setTimeout(async () => {
+        const res = await virtualOS.executeCommand(trimmed);
+        const resultText = res.stderr ? `[STDERR]\n${res.stderr}` : res.stdout || "(sem saída)";
+        
+        setOutputs((prev) =>
+          prev.map((o) => (o.id === newId ? { 
+            ...o, 
+            response: resultText,
+            provider: "WebContainer Local",
+          } : o))
+        );
+        setVirtualFiles(virtualOS.listFiles());
+        setIsRunning(false);
+      }, 150);
+      return;
+    }
+
+    // 3. Se for uma solicitação de IA / Claude Code
     try {
       const res = await fetch("/api/terminal", {
         method: "POST",
@@ -156,6 +191,27 @@ export function TerminalPage() {
         );
       }
 
+      // Detecta se há bloco de código JavaScript ou Python para permitir execução com 1 clique
+      const codeMatch = fullText.match(/```(?:javascript|js|node)?\s*([\s\S]*?)```/);
+      if (codeMatch && codeMatch[1]) {
+        const extractedCode = codeMatch[1].trim();
+        const autoFileName = `script_${Date.now().toString().slice(-4)}.js`;
+        virtualOS.writeFile(autoFileName, extractedCode);
+        setVirtualFiles(virtualOS.listFiles());
+
+        setOutputs((prev) =>
+          prev.map((o) =>
+            o.id === newId
+              ? {
+                  ...o,
+                  isExecutableCode: true,
+                  codeToRun: autoFileName,
+                }
+              : o
+          )
+        );
+      }
+
       // Grava telemetria real no store se houve tokens
       if (totalTokens > 0 || fullText.length > 0) {
         const computedTokens = totalTokens > 0 ? totalTokens : Math.round((cmd.length + fullText.length) / 4);
@@ -188,6 +244,11 @@ export function TerminalPage() {
     } finally {
       setIsRunning(false);
     }
+  };
+
+  // Executa arquivo no Sandbox virtual com 1 clique
+  const handleRunInSandbox = async (fileName: string) => {
+    handleExecute(`node ${fileName}`);
   };
 
   const handleCopy = (text: string) => {
@@ -265,18 +326,36 @@ export function TerminalPage() {
         </div>
 
         {/* Quick Command Pills */}
-        <div className="px-4 py-2.5 bg-zinc-900/60 border-b border-zinc-800/80 flex items-center gap-2 overflow-x-auto scrollbar-none">
-          <span className="text-[10px] text-zinc-500 shrink-0 uppercase tracking-wider font-semibold">Atalhos:</span>
-          {quickCommands.map((q) => (
-            <button
-              key={q.label}
-              onClick={() => handleExecute(q.cmd)}
-              disabled={isRunning}
-              className="px-2.5 py-1 rounded-lg bg-zinc-800/80 hover:bg-zinc-700/80 text-zinc-300 border border-zinc-700/60 text-[11px] transition whitespace-nowrap disabled:opacity-50"
-            >
-              {q.label}
-            </button>
-          ))}
+        <div className="px-4 py-2 bg-zinc-900/60 border-b border-zinc-800/80 flex items-center justify-between gap-4 overflow-x-auto scrollbar-none">
+          <div className="flex items-center gap-2 overflow-x-auto scrollbar-none">
+            <span className="text-[10px] text-zinc-500 shrink-0 uppercase tracking-wider font-semibold">Atalhos:</span>
+            {quickCommands.map((q) => (
+              <button
+                key={q.label}
+                onClick={() => handleExecute(q.cmd)}
+                disabled={isRunning}
+                className="px-2.5 py-1 rounded-lg bg-zinc-800/80 hover:bg-zinc-700/80 text-zinc-300 border border-zinc-700/60 text-[11px] transition whitespace-nowrap disabled:opacity-50"
+              >
+                {q.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Arquivos no Sandbox Virtual */}
+          <div className="hidden md:flex items-center gap-2 shrink-0 border-l border-zinc-800 pl-3">
+            <Layers className="h-3.5 w-3.5 text-zinc-500" />
+            <span className="text-[10px] text-zinc-500 uppercase tracking-wider font-semibold">Arquivos Sandbox:</span>
+            {virtualFiles.slice(0, 3).map((f) => (
+              <button
+                key={f.name}
+                onClick={() => handleExecute(`cat ${f.name}`)}
+                className="px-2 py-0.5 rounded bg-zinc-800/60 hover:bg-zinc-700/60 text-zinc-300 border border-zinc-700/40 text-[10px] transition"
+                title={`Ver conteúdo de ${f.name}`}
+              >
+                {f.name}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Terminal Output Area */}
@@ -302,11 +381,32 @@ export function TerminalPage() {
               </div>
 
               {/* Assistant Response Box */}
-              <div className="bg-zinc-900/70 p-4 rounded-xl border border-zinc-800/60 text-zinc-200 whitespace-pre-wrap font-mono select-text">
+              <div className="bg-zinc-900/70 p-4 rounded-xl border border-zinc-800/60 text-zinc-200 whitespace-pre-wrap font-mono select-text relative">
                 {out.response || (
                   <span className="text-primary flex items-center gap-2 animate-pulse">
                     <span className="h-2 w-2 rounded-full bg-primary" /> Executando análise com motor Claude Code...
                   </span>
+                )}
+
+                {/* Botão de Execução Instantânea no Sandbox */}
+                {out.isExecutableCode && out.codeToRun && (
+                  <div className="mt-4 pt-3 border-t border-zinc-800 flex items-center justify-between gap-3 flex-wrap">
+                    <div className="flex items-center gap-2 text-[11px] text-zinc-400">
+                      <span className="px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 font-semibold">
+                        {out.codeToRun}
+                      </span>
+                      <span>salvo no Sandbox Virtual</span>
+                    </div>
+
+                    <button
+                      onClick={() => handleRunInSandbox(out.codeToRun!)}
+                      disabled={isRunning}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-xs shadow-md transition disabled:opacity-50"
+                    >
+                      <Play className="h-3.5 w-3.5" />
+                      Executar no Sandbox (Custo Zero)
+                    </button>
+                  </div>
                 )}
               </div>
             </div>
