@@ -70,12 +70,12 @@ export const Route = createFileRoute("/api/terminal")({
           // 1. Provedor NVIDIA NIM (Seguro no backend)
           if (nvidiaKey) {
             try {
-              // Lista de modelos suportados para tentar em ordem
+              // Modelos oficiais disponíveis na sua conta NVIDIA NIM:
               const candidateModels = [
                 body.model,
+                "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
                 "qwen/qwen2.5-coder-32b-instruct",
-                "meta/llama-3.1-70b-instruct",
-                "deepseek-ai/deepseek-r1",
+                "meta/llama-3.3-70b-instruct",
               ].filter(Boolean) as string[];
 
               let reply = "";
