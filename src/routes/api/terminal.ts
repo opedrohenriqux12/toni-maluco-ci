@@ -68,83 +68,91 @@ export const Route = createFileRoute("/api/terminal")({
           const openRouterKey = process.env["OPENROUTER_API_KEY"];
           const openAiKey = process.env["OPENAI_API_KEY"];
 
-          // 1. Provedor NVIDIA NIM (Seguro no backend com o payload oficial)
+          // 1. Provedor OpenRouter Gratuito (Prioridade 1 se configurado)
+          if (openRouterKey) {
+            try {
+              const cleanRouterKey = openRouterKey.trim().replace(/^['"]|['"]$/g, "");
+              const provider = createOpenAI({
+                apiKey: cleanRouterKey,
+                baseURL: "https://openrouter.ai/api/v1",
+                headers: {
+                  "HTTP-Referer": "https://tonimaluco.com",
+                  "X-Title": "Toni Maluco Terminal",
+                },
+              });
+
+              const messages = [
+                ...history.map((m) => ({ role: m.role, content: m.content })),
+                { role: "user" as const, content: command },
+              ];
+
+              const result = streamText({
+                model: provider("openrouter/free"),
+                system: CLAUDE_CODE_SYSTEM_PROMPT,
+                messages,
+                abortSignal: request.signal,
+              });
+
+              return result.toTextStreamResponse({
+                headers: {
+                  "Content-Type": "text/plain; charset=utf-8",
+                  "X-Provider-Used": "OpenRouter (Free Auto-Router)",
+                },
+              });
+            } catch (errOpenRouter) {
+              console.error("OpenRouter terminal error:", errOpenRouter);
+            }
+          }
+
+          // 2. Provedor NVIDIA NIM (Llama 3.3 70B & Nemotron)
           if (nvidiaKey) {
             try {
+              const cleanKey = nvidiaKey.trim().replace(/^['"]|['"]$/g, "");
               const nvidiaRes = await fetch("https://integrate.api.nvidia.com/v1/chat/completions", {
+                signal: AbortSignal.timeout(25000),
                 method: "POST",
                 headers: {
                   "Content-Type": "application/json",
-                  "Authorization": `Bearer ${nvidiaKey.trim()}`,
+                  "Authorization": `Bearer ${cleanKey}`,
                   "Accept": "application/json",
                 },
                 body: JSON.stringify({
-                  model: "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+                  model: "meta/llama-3.3-70b-instruct",
                   messages: [
                     { role: "system", content: CLAUDE_CODE_SYSTEM_PROMPT },
                     ...history.map((m) => ({ role: m.role, content: m.content })),
                     { role: "user", content: command },
                   ],
                   max_tokens: 4096,
-                  reasoning_budget: 1024,
                   temperature: 0.6,
                   top_p: 0.95,
                   stream: false,
                 }),
               });
 
-              if (!nvidiaRes.ok) {
-                const errText = await nvidiaRes.text();
-                throw new Error(`HTTP ${nvidiaRes.status}: ${errText}`);
+              if (nvidiaRes.ok) {
+                const data = await nvidiaRes.json();
+                const reply = data.choices?.[0]?.message?.content || "[Sem resposta gerada pelo modelo]";
+                const promptTokens = data.usage?.prompt_tokens || Math.round(command.length / 4);
+                const completionTokens = data.usage?.completion_tokens || Math.round(reply.length / 4);
+                const totalTokens = data.usage?.total_tokens || (promptTokens + completionTokens);
+
+                return new Response(reply, {
+                  status: 200,
+                  headers: {
+                    "Content-Type": "text/plain; charset=utf-8",
+                    "X-Provider-Used": "NVIDIA NIM (Llama 3.3 70B)",
+                    "X-Prompt-Tokens": String(promptTokens),
+                    "X-Completion-Tokens": String(completionTokens),
+                    "X-Total-Tokens": String(totalTokens),
+                  },
+                });
+              } else {
+                console.warn(`NVIDIA Llama 3.3 failed (${nvidiaRes.status}), tentando Nemotron...`);
               }
-
-              const data = await nvidiaRes.json();
-              const reply = data.choices?.[0]?.message?.content || "[Sem resposta gerada pelo modelo]";
-              const promptTokens = data.usage?.prompt_tokens || Math.round(command.length / 4);
-              const completionTokens = data.usage?.completion_tokens || Math.round(reply.length / 4);
-              const totalTokens = data.usage?.total_tokens || (promptTokens + completionTokens);
-
-              return new Response(reply, {
-                status: 200,
-                headers: {
-                  "Content-Type": "text/plain; charset=utf-8",
-                  "X-Provider-Used": "nvidia-nim",
-                  "X-Prompt-Tokens": String(promptTokens),
-                  "X-Completion-Tokens": String(completionTokens),
-                  "X-Total-Tokens": String(totalTokens),
-                },
-              });
             } catch (nvidiaErr: any) {
-              console.error("Erro na NVIDIA NIM:", nvidiaErr);
-              // Fall through to try the next provider
+              console.error("Erro na NVIDIA NIM Llama 3.3:", nvidiaErr);
             }
-          }
-
-          // 2. Provedor OpenRouter Gratuito
-          if (openRouterKey) {
-            const provider = createOpenAI({
-              apiKey: openRouterKey,
-              baseURL: "https://openrouter.ai/api/v1",
-            });
-
-            const messages = [
-              ...history.map((m) => ({ role: m.role, content: m.content })),
-              { role: "user" as const, content: command },
-            ];
-
-            const result = streamText({
-              model: provider(body.model || "deepseek/deepseek-r1:free"),
-              system: CLAUDE_CODE_SYSTEM_PROMPT,
-              messages,
-              abortSignal: request.signal,
-            });
-
-            return result.toTextStreamResponse({
-              headers: {
-                "Content-Type": "text/plain; charset=utf-8",
-                "X-Provider-Used": "openrouter-free",
-              },
-            });
           }
 
           // 3. Provedor OpenAI Fallback
