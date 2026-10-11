@@ -81,7 +81,7 @@ export const Route = createFileRoute("/api/terminal")({
               ];
 
               const result = await generateText({
-                model: provider(body.model || "meta/llama-3.3-70b-instruct"),
+                model: provider.chat(body.model || "meta/llama-3.3-70b-instruct"),
                 system: CLAUDE_CODE_SYSTEM_PROMPT,
                 messages,
                 abortSignal: request.signal,
