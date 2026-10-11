@@ -217,27 +217,91 @@ export const Route = createFileRoute("/api/chat")({
 
         // 4. Simulação rica local
         const activeAdvisors = advisors.filter((a) => body.active?.includes(a.id) ?? false);
+
+        // Import the style object for proper personality simulation
+        const style: Record<string, string> = {
+          helena: "Fala seco, em números. Sempre calcula margem líquida, capital empatado e tempo de retorno. Desconfia de qualquer plano sem fluxo de caixa.",
+          rafael: "Calmo e preciso. Aponta riscos de termos de uso das plataformas, CDC, LGPD, marca e enquadramento fiscal (MEI/Simples). Nunca dá certeza jurídica absoluta; recomenda advogado quando necessário.",
+          bruno: "Pragmático. Sugere a automação mais simples possível (planilha, Zapier, script) e corta complexidade inútil.",
+          icaro: "Analítico e ácido. Questiona amostras pequenas, médias enganosas e previsões sem base. Fala em intervalos e probabilidades.",
+          marina: "Enérgica, foca em conversão: título, copy, prova social, oferta e canal. Dá exemplos prontos de texto.",
+          ze: "Veterano desconfiado, fala simples e direto. Foca em golpe, chargeback, banimento, fornecedor e entrega.",
+          lucia: "Advogada do diabo. Ataca a premissa do usuário, aponta viés e FOMO, e faz a pergunta incômoda.",
+        };
+
         let simulatedResponse = "";
           if (activeAdvisors.length === 0) {
             simulatedResponse = `Como um conselho simulado, recebi sua mensagem: "${lastTextMsg}". Sem conselheiros específicos selecionados, ofereço uma reflexão geral: considere o contexto, seus objetivos e os possíveis impactos de suas decisões.`;
           } else {
-            simulatedResponse = `Conselho simulado reunido para analisar: "${lastTextMsg}".\n\n`;
-            activeAdvisors.forEach((advisor) => {
-              simulatedResponse += `- ${advisor.name} (${advisor.area}): `;
-              // generic advice based on area
-              const areaLower = advisor.area.toLowerCase();
-              if (areaLower.includes("finance") || areaLower.includes("invest") || areaLower.includes("econ")) {
-                simulatedResponse += "Avalie os riscos e retornos financeiros; não deixe a emoção guiar seus investimentos.\n";
-              } else if (areaLower.includes("marketing") || areaLower.includes("sales") || areaLower.includes("venda")) {
-                simulatedResponse += "Foque no valor para o cliente e na comunicação clara dos benefícios.\n";
-              } else if (areaLower.includes("jurídico") || areaLower.includes("legal") || areaLower.includes("direito")) {
-                simulatedResponse += "Verifique a conformidade com regulamentações e proteja seus direitos contratuais.\n";
-              } else if (areaLower.includes("tecnologia") || areaLower.includes("ti") || areaLower.includes("tech")) {
-                simulatedResponse += "Considere a escalabilidade, segurança e manutenibilidade da solução técnica.\n";
+            // Apply council mode logic
+            const mode = body.mode ?? "geral";
+            let advisorsToShow = [...activeAdvisors];
+
+            if (mode === "individual") {
+              // Choose the single most qualified advisor based on routing
+              const r = buildCouncilPrompt(lastTextMsg, "geral", body.active ?? []); // Reuse routing logic
+              // Extract IDs from the reason (simplified)
+              const mentionedAdvisors = advisors.filter(a =>
+                lastTextMsg.toLowerCase().includes(a.short.toLowerCase()) ||
+                a.keywords.some(k => lastTextMsg.toLowerCase().includes(k.toLowerCase()))
+              );
+              if (mentionedAdvisors.length > 0) {
+                advisorsToShow = [mentionedAdvisors[0]];
+              } else if (activeAdvisors.length > 0) {
+                advisorsToShow = [activeAdvisors[0]];
               } else {
-                simulatedResponse += "Refletir sobre os prós e contras, buscando equilíbrio entre pragmatismo e visão de longo prazo.\n";
+                advisorsToShow = [];
               }
+              advisorsToShow = advisorsToShow.slice(0, 1);
+            } else if (mode === "war") {
+              // All active advisors participate in war room
+              advisorsToShow = [...activeAdvisors];
+            } else {
+              // geral mode: choose 1-2 most qualified based on routing
+              const r = buildCouncilPrompt(lastTextMsg, "geral", body.active ?? []);
+              // For simplicity in simulation, we'll show all active but note this is a simplification
+              advisorsToShow = [...activeAdvisors];
+            }
+
+            simulatedResponse = `Conselho simulado reunido para analisar: "${lastTextMsg}".\n\n`;
+            advisorsToShow.forEach((advisor) => {
+              simulatedResponse += `### ${advisor.short} — ${advisor.area}\n`;
+              simulatedResponse += `${advisor.persona}. `;
+
+              // Add personality-specific advice based on the style
+              const advisorStyle = style[advisor.id as keyof typeof style] || "";
+              if (advisorStyle) {
+                simulatedResponse += `${advisorStyle} `;
+              }
+
+              // Add contextual advice based on the message content
+              const lowerMsg = lastTextMsg.toLowerCase();
+              if (advisor.id === "helena") { // Financeiro
+                simulatedResponse += `Ao analisar "${lastTextMsg}", quero ver os números: qual é o investimento necessário, o retorno esperado e o prazo de payback? Sem margem líquida positiva e fluxo de caixa claro, não procede.`;
+              } else if (advisor.id === "rafael") { // Jurídico
+                simulatedResponse += `Precisamos verificar se "${lastTextMsg}" está em conformidade com os termos das plataformas envolvidas, bem como com o CDC e LGPD. Recomendo revisão jurídica antes de prosseguir.`;
+              } else if (advisor.id === "bruno") { // Automação
+                simulatedResponse += `Para "${lastTextMsg}", sugiro começar com a automação mais simples possível - talvez uma planilha ou um script básico. Evite over-engineering inicialmente.`;
+              } else if (advisor.id === "icaro") { // Estatística
+                simulatedResponse += `Quais são os dados que sustentam "${lastTextMsg}"? Preciso ver amostras suficientes e não ficar enganado por médias que não representam a realidade. Trabalhe com intervalos de confiança.`;
+              } else if (advisor.id === "marina") { // Marketing
+                simulatedResponse += `Como vamos vender "${lastTextMsg}"? Precisamos de um gancho forte, prova social e um chamado para ação claro. Vou te dar um exemplo de copy que converte.`;
+              } else if (advisor.id === "ze") { // Operação
+                simulatedResponse += `Já vi muita promessa como "${lastTextMsg}" acabar em golpe ou chargeback. Verifique bem o fornecedor, teste com pequeno lote primeiro e nunca confie apenas em promessas.`;
+              } else if (advisor.id === "lucia") { // Advogada do diabo
+                simulatedResponse += `Você realmente acredita que "${lastTextMsg}" vai funcionar? Qual o viés de confirmação que você não está vendo? E se der errado, qual o plano B?`;
+              } else {
+                // Fallback for any undefined advisors
+                simulatedResponse += `Refletindo sobre "${lastTextMsg}" na área de ${advisor.area}.`;
+              }
+
+              simulatedResponse += "\n\n";
             });
+
+            if (mode === "war") {
+              simulatedResponse += "### Veredito do Conselho\nApós análise dos pontos de vista apresentados, o consenso é: é necessário avançar com cautela, validando cada pressuposto antes de investir recursos significativos. Próximo passo: coletar dados concretos para reduzir as incertezas identificadas.\n";
+            }
+
             simulatedResponse += `\nLembre-se: o conselho é uma ferramenta de reflexão, não uma decisão final.`;
           }
 
