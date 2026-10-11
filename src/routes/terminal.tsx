@@ -127,9 +127,9 @@ export function TerminalPage() {
 
     setOutputs((prev) => [...prev, newOutput]);
 
-    // 2. Se for um comando de shell local (ls, cat, node, pwd, whoami, rm, echo)
+    // 2. Se for um comando de shell local (ls, cat, node, pwd, whoami, rm, echo, tokens, quota)
     const firstWord = (trimmed.split(/\s+/)[0] || "").toLowerCase();
-    const localCommands = ["ls", "cat", "node", "pwd", "whoami", "date", "env", "rm", "echo", "run"];
+    const localCommands = ["ls", "cat", "node", "pwd", "whoami", "date", "env", "rm", "echo", "run", "tokens", "quota"];
 
     if (localCommands.includes(firstWord)) {
       setTimeout(async () => {
@@ -191,25 +191,29 @@ export function TerminalPage() {
         );
       }
 
-      // Detecta se há bloco de código JavaScript ou Python para permitir execução com 1 clique
-      const codeMatch = fullText.match(/```(?:javascript|js|node)?\s*([\s\S]*?)```/);
+      // Detecta APENAS blocos reais de código executável em JavaScript/TypeScript (evita bash ou simples texto de terminal)
+      const codeMatch = fullText.match(/```(?:javascript|js|node|typescript|ts)\s*([\s\S]*?)```/);
       if (codeMatch && codeMatch[1]) {
         const extractedCode = codeMatch[1].trim();
-        const autoFileName = `script_${Date.now().toString().slice(-4)}.js`;
-        virtualOS.writeFile(autoFileName, extractedCode);
-        setVirtualFiles(virtualOS.listFiles());
+        // Não salva se for apenas prompt bash ou comando único
+        const isNotBashExample = !extractedCode.startsWith("$") && !extractedCode.startsWith("npm") && !extractedCode.startsWith("git");
+        if (isNotBashExample && (extractedCode.includes("console.log") || extractedCode.includes("function") || extractedCode.includes("const ") || extractedCode.includes("let "))) {
+          const autoFileName = `script_${Date.now().toString().slice(-4)}.js`;
+          virtualOS.writeFile(autoFileName, extractedCode);
+          setVirtualFiles(virtualOS.listFiles());
 
-        setOutputs((prev) =>
-          prev.map((o) =>
-            o.id === newId
-              ? {
-                  ...o,
-                  isExecutableCode: true,
-                  codeToRun: autoFileName,
-                }
-              : o
-          )
-        );
+          setOutputs((prev) =>
+            prev.map((o) =>
+              o.id === newId
+                ? {
+                    ...o,
+                    isExecutableCode: true,
+                    codeToRun: autoFileName,
+                  }
+                : o
+            )
+          );
+        }
       }
 
       // Grava telemetria real no store se houve tokens

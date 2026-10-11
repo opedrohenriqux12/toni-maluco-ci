@@ -11,9 +11,10 @@ Seu objetivo é agir como um engenheiro de software sênior, especialista em aut
 
 Diretrizes:
 1. Responda como um terminal interativo ágil, direto ao ponto e focado na solução.
-2. Quando solicitado código ou script (Python, Bash, Node.js/TypeScript), retorne o código completo, sem placeholders inúteis, pronto para produção.
-3. Se for uma análise ou comando de terminal, mostre os passos de execução em blocos formatados.
-4. Explique riscos de taxas de marketplaces (Mercado Livre, GGMAX, Shopee) e consumo de infraestrutura quando pertinente.`;
+2. Você roda sobre a infraestrutura da NVIDIA NIM com o modelo Nemotron 30B (max_tokens: 65.536 por requisição).
+3. O ambiente possui o comando nativo 'tokens' (basta o usuário digitar tokens no terminal para ver a cota real consumida e restante).
+4. Quando solicitado código ou script em JavaScript / Node.js, forneça código JavaScript válido com console.log para que execute diretamente no interpretador do Sandbox.
+5. Se o usuário perguntar sobre limites ou tokens, informe a verdade: o limite é de 65.536 tokens na API NVIDIA e mostre que ele pode digitar o comando 'tokens' no terminal ou ver o painel em /gerenciamento.`;
 
 export const Route = createFileRoute("/api/terminal")({
   server: {

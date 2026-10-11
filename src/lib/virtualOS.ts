@@ -1,3 +1,5 @@
+import { getTelemetryData } from "./telemetryStore";
+
 export interface VirtualFile {
   name: string;
   content: string;
@@ -114,6 +116,18 @@ console.log("Lucro estimado: R$ " + (liquido - 65).toFixed(2));
           .map(([k, v]) => `${k}=${v}`)
           .join("\n") + "\n";
         break;
+
+      case "tokens":
+      case "quota": {
+        const tele = getTelemetryData();
+        stdout = `[TELEMETRIA NVIDIA NIM REAL]\n` +
+          `• Total de Tokens Monitorados: ${tele.totalTokens.toLocaleString("pt-BR")}\n` +
+          `• Chamadas Reais de IA: ${tele.totalCalls}\n` +
+          `• Créditos NVIDIA Utilizados: ${tele.creditsUsedNvidia} / ${tele.creditsLimitNvidia}\n` +
+          `• Créditos NVIDIA Restantes: ${tele.creditsRemainingNvidia}\n` +
+          `• Limite Máximo por Mensagem: 65.536 tokens (NVIDIA Nemotron 30B)\n`;
+        break;
+      }
 
       case "ls": {
         const fileNames = Array.from(this.files.values())
