@@ -101,32 +101,61 @@ function ChatWindow({ threadId, user, initial }: { threadId: string; user: any |
     transport,
     onError: (e) => toast.error(e.message || "Falha ao falar com o Conselho."),
     onFinish: async ({ message }) => {
-      // Save assistant message
-      if (user) {
-        const { data: u } = await supabase.auth.getUser();
-        if (!u.user) return;
-        const { error } = await supabase.from("council_messages").upsert(
-          {
-            thread_id: threadId,
-            user_id: u.user.id,
-            sdk_id: message.id,
-            role: "assistant",
-            parts: message.parts as any,
-          },
-          { onConflict: "thread_id,sdk_id" },
-        );
-        if (error) console.error("save assistant message", error);
+      // 1. Sempre salva no localStorage (garante persistência mesmo se Supabase falhar ou estiver deslogado)
+      const stored = localStorage.getItem(`council_messages_${threadId}`);
+      const current: UIMessage[] = stored ? JSON.parse(stored) : [];
+      const newMessage: UIMessage = {
+        id: message.id,
+        role: "assistant",
+        parts: message.parts,
+      };
+      const updatedMessages = [...current.filter((m) => m.id !== message.id), newMessage];
+      localStorage.setItem(`council_messages_${threadId}`, JSON.stringify(updatedMessages));
+
+      // Atualiza título da thread e sessões salvas
+      const firstText = updatedMessages[0]?.parts.map((p) => (p.type === "text" ? p.text : "")).join(" ").slice(0, 45) || "Conversa do Conselho";
+      const localThreadsRaw = localStorage.getItem("council_threads");
+      let threadsList: any[] = localThreadsRaw ? JSON.parse(localThreadsRaw) : [];
+      const threadIdx = threadsList.findIndex((t) => t.id === threadId);
+      if (threadIdx >= 0) {
+        threadsList[threadIdx] = { ...threadsList[threadIdx], title: firstText, updated_at: new Date().toISOString() };
       } else {
-        // Save to localStorage
-        const stored = localStorage.getItem(`council_messages_${threadId}`);
-        const current: UIMessage[] = stored ? JSON.parse(stored) : [];
-        const newMessage: UIMessage = {
-          id: message.id,
-          role: "assistant",
-          parts: message.parts,
-        };
-        localStorage.setItem(`council_messages_${threadId}`, JSON.stringify([...current, newMessage]));
+        threadsList.unshift({ id: threadId, title: firstText, updated_at: new Date().toISOString() });
       }
+      localStorage.setItem("council_threads", JSON.stringify(threadsList));
+
+      // Atualiza na sessão de projeto
+      saveOrUpdateSession({
+        id: threadId,
+        type: "conselho",
+        title: firstText,
+        projectId: selectedProject || undefined,
+        createdAt: new Date().toISOString(),
+        data: updatedMessages,
+      });
+
+      // 2. Tenta salvar no Supabase se logado
+      if (user) {
+        try {
+          const { data: u } = await supabase.auth.getUser();
+          if (u?.user) {
+            await supabase.from("council_messages").upsert(
+              {
+                thread_id: threadId,
+                user_id: u.user.id,
+                sdk_id: message.id,
+                role: "assistant",
+                parts: message.parts as any,
+              },
+              { onConflict: "thread_id,sdk_id" },
+            );
+            await supabase.from("council_threads").update({ title: firstText, updated_at: new Date().toISOString() }).eq("id", threadId);
+          }
+        } catch (error) {
+          console.warn("Supabase background save", error);
+        }
+      }
+      
       qc.invalidateQueries({ queryKey: threadsKey });
       inputRef.current?.focus();
     },
@@ -151,9 +180,25 @@ function ChatWindow({ threadId, user, initial }: { threadId: string; user: any |
       role: "user",
       parts: [{ type: "text", text: currentText }],
     };
+    // Sempre salva localmente a mensagem do usuário para nunca perder histórico
+    const stored = localStorage.getItem(`council_messages_${threadId}`);
+    const current: UIMessage[] = stored ? JSON.parse(stored) : [];
+    const updatedMessages = [...current.filter((m) => m.id !== userMessage.id), userMessage];
+    localStorage.setItem(`council_messages_${threadId}`, JSON.stringify(updatedMessages));
+
+    const localThreadsRaw = localStorage.getItem("council_threads");
+    let threadsList: any[] = localThreadsRaw ? JSON.parse(localThreadsRaw) : [];
+    const threadIdx = threadsList.findIndex((t) => t.id === threadId);
+    if (threadIdx >= 0) {
+      threadsList[threadIdx] = { ...threadsList[threadIdx], title: currentText.slice(0, 45), updated_at: new Date().toISOString() };
+    } else {
+      threadsList.unshift({ id: threadId, title: currentText.slice(0, 45), updated_at: new Date().toISOString() });
+    }
+    localStorage.setItem("council_threads", JSON.stringify(threadsList));
+
     if (user) {
       const { data: u } = await supabase.auth.getUser();
-      if (u.user) {
+      if (u?.user) {
         await supabase.from("council_messages").upsert(
           {
             thread_id: threadId,
@@ -165,12 +210,9 @@ function ChatWindow({ threadId, user, initial }: { threadId: string; user: any |
           { onConflict: "thread_id,sdk_id" },
         );
       }
-    } else {
-      const stored = localStorage.getItem(`council_messages_${threadId}`);
-      const current: UIMessage[] = stored ? JSON.parse(stored) : [];
-      localStorage.setItem(`council_messages_${threadId}`, JSON.stringify([...current, userMessage]));
     }
     sendMessage({ text: currentText }, { body: { threadId, mode, active: [...activeAdvisors] } });
+    qc.invalidateQueries({ queryKey: threadsKey });
     inputRef.current?.focus();
   };
 

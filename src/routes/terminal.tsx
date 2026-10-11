@@ -331,6 +331,33 @@ export function TerminalPage() {
             </button>
           </div>
 
+          {/* Seletor de Sessões Salvas Anteriores */}
+          {savedTerminalSessions.length > 0 && (
+            <div className="flex items-center gap-1.5 rounded-xl bg-card/60 border border-border/50 px-3 py-1.5 text-xs">
+              <Clock className="h-3.5 w-3.5 text-primary" />
+              <select
+                onChange={(e) => {
+                  const targetSession = savedTerminalSessions.find((s) => s.id === e.target.value);
+                  if (targetSession && Array.isArray(targetSession.data)) {
+                    setOutputs(targetSession.data);
+                    setCurrentSessionId(targetSession.id);
+                    if (targetSession.projectId) setSelectedProjectId(targetSession.projectId);
+                    toast.success(`Sessão '${targetSession.title}' restaurada!`);
+                  }
+                }}
+                defaultValue=""
+                className="bg-transparent text-xs text-foreground outline-none font-medium cursor-pointer max-w-[130px] truncate"
+              >
+                <option value="" disabled className="bg-zinc-900 text-zinc-300">Sessões Salvas ({savedTerminalSessions.length})</option>
+                {savedTerminalSessions.map((s) => (
+                  <option key={s.id} value={s.id} className="bg-zinc-900 text-zinc-300">
+                    💾 {s.title}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           {/* Botão de Salvar Sessão do Terminal */}
           <button
             onClick={() => {
