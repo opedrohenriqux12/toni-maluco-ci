@@ -1,11 +1,11 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { PageTitle } from "@/components/AppShell";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { 
   User, Lock, ShieldCheck, LogOut, KeyRound, CheckCircle2, 
-  AlertTriangle, Mail, ShieldAlert, Smartphone, Clock
+  AlertTriangle, Mail, ShieldAlert, Smartphone, Clock, Trash2
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -31,6 +31,27 @@ export function PerfilPage() {
   const [mfaSecret, setMfaSecret] = useState<string | null>(null);
   const [factorId, setFactorId] = useState<string | null>(null);
   const [totpVerifyCode, setTotpVerifyCode] = useState("");
+
+  const [activeFactors, setActiveFactors] = useState<any[]>([]);
+
+  const loadFactors = async () => {
+    try {
+      const res = await supabase.auth.mfa.listFactors();
+      if (res.data?.totp) {
+        setActiveFactors(res.data.totp);
+      } else {
+        setActiveFactors([]);
+      }
+    } catch {
+      // ignore
+    }
+  };
+
+  useEffect(() => {
+    if (user) {
+      loadFactors();
+    }
+  }, [user]);
 
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -60,6 +81,16 @@ export function PerfilPage() {
   const handleStartMfaEnroll = async () => {
     setMfaEnrolling(true);
     try {
+      // Clean up previous unverified factors so Supabase doesn't block enrollment
+      const factorsRes = await supabase.auth.mfa.listFactors();
+      if (factorsRes.data?.totp) {
+        for (const factor of factorsRes.data.totp) {
+          if ((factor as any).status === "unverified") {
+            await supabase.auth.mfa.unenroll({ factorId: factor.id });
+          }
+        }
+      }
+
       const { data, error } = await supabase.auth.mfa.enroll({
         factorType: "totp",
         issuer: "ToniMaluco C.I",
@@ -84,22 +115,35 @@ export function PerfilPage() {
 
     setBusy(true);
     try {
-      const challenge = await supabase.auth.mfa.challenge({ factorId });
-      if (challenge.error) throw challenge.error;
-
-      const verify = await supabase.auth.mfa.verify({
+      const { data, error } = await supabase.auth.mfa.challengeAndVerify({
         factorId,
-        challengeId: challenge.data.id,
         code: totpVerifyCode.trim(),
       });
 
-      if (verify.error) throw verify.error;
+      if (error) throw error;
 
       toast.success("MFA TOTP ativado com sucesso para sua conta!");
       setMfaEnrolling(false);
       setQrCode(null);
+      setTotpVerifyCode("");
+      loadFactors();
     } catch (err: any) {
-      toast.error(err.message || "Código inválido.");
+      toast.error(err.message || "Código inválido ou expirado.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleUnenrollMfa = async (id: string) => {
+    if (!confirm("Deseja realmente desativar a autenticação em 2 fatores para esta conta?")) return;
+    setBusy(true);
+    try {
+      const { error } = await supabase.auth.mfa.unenroll({ factorId: id });
+      if (error) throw error;
+      toast.success("Autenticação em 2 fatores desativada com sucesso.");
+      loadFactors();
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao desativar autenticador.");
     } finally {
       setBusy(false);
     }
@@ -227,10 +271,37 @@ export function PerfilPage() {
               </span>
             </div>
 
-            {!mfaEnrolling ? (
+            {/* Status of Active Verified Factors */}
+            {activeFactors.some((f) => f.status === "verified") ? (
+              <div className="space-y-3 pt-2">
+                <div className="flex items-center justify-between p-3.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 text-xs">
+                  <div className="flex items-center gap-2.5">
+                    <CheckCircle2 className="h-5 w-5 text-emerald-400 shrink-0" />
+                    <div>
+                      <p className="font-bold text-foreground">Autenticação em 2 Fatores Ativa</p>
+                      <p className="text-[11px] text-muted-foreground">Sua conta está protegida com autenticador TOTP.</p>
+                    </div>
+                  </div>
+                  {activeFactors
+                    .filter((f) => f.status === "verified")
+                    .map((f) => (
+                      <button
+                        key={f.id}
+                        type="button"
+                        onClick={() => handleUnenrollMfa(f.id)}
+                        disabled={busy}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-rose-500/30 bg-rose-500/10 text-rose-400 text-xs font-semibold hover:bg-rose-500/20 transition disabled:opacity-50"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" /> Desativar 2FA
+                      </button>
+                    ))}
+                </div>
+              </div>
+            ) : !mfaEnrolling ? (
               <button
                 onClick={handleStartMfaEnroll}
-                className="rounded-lg border border-primary/40 bg-primary/10 px-4 py-2 text-xs font-semibold text-primary hover:bg-primary/20 transition"
+                disabled={busy}
+                className="rounded-lg border border-primary/40 bg-primary/10 px-4 py-2 text-xs font-semibold text-primary hover:bg-primary/20 transition disabled:opacity-50"
               >
                 Configurar Autenticador TOTP
               </button>

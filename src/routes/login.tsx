@@ -121,9 +121,12 @@ export function Login() {
           throw new Error(error.message || "Erro ao realizar login.");
         }
 
-        // Check if MFA TOTP is required (AAL2 verification)
+        // Check if MFA TOTP is required ONLY if user has a verified factor
+        const factors = await supabase.auth.mfa.listFactors();
+        const verifiedFactor = factors.data?.totp?.find((f) => f.status === "verified");
+
         const { data: mfaData, error: mfaCheckError } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
-        if (!mfaCheckError && mfaData && mfaData.nextLevel === "aal2" && mfaData.currentLevel !== "aal2") {
+        if (verifiedFactor && !mfaCheckError && mfaData && mfaData.nextLevel === "aal2" && mfaData.currentLevel !== "aal2") {
           setMode("mfa");
           toast.info("Autenticação em Dois Fatores (MFA) necessária.");
           return;
@@ -188,22 +191,18 @@ export function Login() {
       const factors = await supabase.auth.mfa.listFactors();
       if (factors.error) throw factors.error;
 
-      const totpFactor = factors.data.totp[0];
+      const totpFactor = factors.data.totp.find((f) => f.status === "verified") || factors.data.totp[0];
       if (!totpFactor) {
-        throw new Error("Fator TOTP não encontrado.");
+        throw new Error("Nenhum autenticador 2FA encontrado para esta conta.");
       }
 
-      const challenge = await supabase.auth.mfa.challenge({ factorId: totpFactor.id });
-      if (challenge.error) throw challenge.error;
-
-      const verify = await supabase.auth.mfa.verify({
+      const { data, error } = await supabase.auth.mfa.challengeAndVerify({
         factorId: totpFactor.id,
-        challengeId: challenge.data.id,
         code: mfaCode.trim(),
       });
 
-      if (verify.error) {
-        throw new Error("Código MFA inválido ou expirado.");
+      if (error) {
+        throw new Error("Código 2FA incorreto ou expirado. Verifique o horário do seu celular.");
       }
 
       toast.success("Segundo fator validado com sucesso!");
