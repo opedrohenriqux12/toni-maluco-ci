@@ -542,6 +542,58 @@ export function GerenciamentoPage() {
             )}
           </div>
 
+          {/* OpenRouter Telemetria & Limite de Quota */}
+          <div className="glass p-5 rounded-2xl border border-sky-500/30 space-y-4">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-xl bg-sky-500/10 border border-sky-500/30 flex items-center justify-center text-sky-400 font-bold shrink-0">
+                  <Zap className="h-5 w-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h4 className="font-bold text-sm text-foreground">API OpenRouter (Modelos Gratuitos & DeepSeek)</h4>
+                    <span className="text-[10px] font-semibold text-sky-400 bg-sky-500/10 border border-sky-500/20 px-2 py-0.5 rounded-full">
+                      Prioridade #1 Conselho
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Roteamento automático com cotas de até 50 requisições/dia (ou 1.000 com conta com créditos) e limite de 20 RPM.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 text-xs flex-wrap">
+                <span className="text-muted-foreground">Rate Limit:</span>
+                <span className="px-2.5 py-1 rounded-lg bg-sky-500/10 border border-sky-500/20 text-sky-400 font-semibold flex items-center gap-1">
+                  <Activity className="h-3.5 w-3.5" /> {telemetry.openRouterRpmLimit || 20} RPM (Req/Min)
+                </span>
+              </div>
+            </div>
+
+            {/* Barra de Progresso de Requisições Diárias OpenRouter */}
+            <div className="space-y-2 pt-2 border-t border-border/40">
+              <div className="flex justify-between items-center text-xs">
+                <span className="font-semibold text-muted-foreground">Requisições Diárias Gratuitas</span>
+                <span className="font-mono font-bold text-foreground">
+                  {telemetry.openRouterDailyRequestsUsed || 0} / {telemetry.openRouterDailyLimit || 50} requisições hoje ({(((telemetry.openRouterDailyRequestsUsed || 0) / (telemetry.openRouterDailyLimit || 50)) * 100).toFixed(1)}%)
+                </span>
+              </div>
+              <div className="h-2.5 w-full rounded-full bg-muted overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-sky-400 glow transition-all duration-500"
+                  style={{ width: `${Math.max(1, (((telemetry.openRouterDailyRequestsUsed || 0) / (telemetry.openRouterDailyLimit || 50)) * 100))}%` }}
+                />
+              </div>
+              <div className="flex flex-wrap justify-between items-center text-[11px] text-muted-foreground gap-2 pt-1">
+                <span className="text-sky-400 font-semibold">
+                  {Math.max(0, (telemetry.openRouterDailyLimit || 50) - (telemetry.openRouterDailyRequestsUsed || 0))} requisições restantes hoje
+                </span>
+                <span>Modelo padrão: <strong className="text-foreground">openrouter/free (Auto-Router)</strong></span>
+                <span>Custo por token: <strong className="text-emerald-400">R$ 0,00 (Free Tier)</strong></span>
+              </div>
+            </div>
+          </div>
+
           {/* Métricas Rápidas de IA */}
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <div className="glass p-4 rounded-xl space-y-1">

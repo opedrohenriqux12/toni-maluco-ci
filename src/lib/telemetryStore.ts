@@ -16,6 +16,9 @@ export interface TelemetrySummary {
   creditsUsedNvidia: number;
   creditsLimitNvidia: number;
   creditsRemainingNvidia: number;
+  openRouterDailyRequestsUsed: number;
+  openRouterDailyLimit: number;
+  openRouterRpmLimit: number;
   costTotalBrl: number;
   history: TokenUsageRecord[];
 }
@@ -35,7 +38,11 @@ export function getTelemetryData(): TelemetrySummary {
 
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
-      return JSON.parse(raw);
+      const parsed = JSON.parse(raw);
+      return {
+        ...getDefaultTelemetry(),
+        ...parsed,
+      };
     }
   } catch (e) {
     console.error("Erro lendo telemetria", e);
@@ -63,13 +70,17 @@ export function recordAiCall(params: {
   const current = getTelemetryData();
 
   // Cálculo de crédito e custo:
-  // No NVIDIA NIM, 1 chamada de chat com 30B consome aproximadamente ~1 a ~2 créditos de avaliação
-  const creditsConsumed = params.provider === "nvidia-nim" 
+  const creditsConsumedNvidia = params.provider === "nvidia-nim" 
     ? Math.max(1, Math.round(params.totalTokens / 500)) 
     : 0;
 
+  const isOpRouter = params.provider === "openrouter";
+  const openRouterReqs = isOpRouter ? current.openRouterDailyRequestsUsed + 1 : current.openRouterDailyRequestsUsed;
+
   // Custo estimado equivalente de mercado para comparação (R$ 0,00 se for free tier)
-  const costBrl = (params.totalTokens / 1000) * 0.0015; // R$ 0,0015 por 1k tokens
+  const costBrl = params.provider === "openrouter" || params.provider === "nvidia-nim" 
+    ? 0.00 
+    : (params.totalTokens / 1000) * 0.0015;
 
   const newRecord: TokenUsageRecord = {
     id: `rec-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -86,11 +97,14 @@ export function recordAiCall(params: {
   const updated: TelemetrySummary = {
     totalCalls: current.totalCalls + 1,
     totalTokens: current.totalTokens + params.totalTokens,
-    creditsUsedNvidia: Math.min(1000, current.creditsUsedNvidia + creditsConsumed),
+    creditsUsedNvidia: Math.min(1000, current.creditsUsedNvidia + creditsConsumedNvidia),
     creditsLimitNvidia: 1000,
-    creditsRemainingNvidia: Math.max(0, current.creditsRemainingNvidia - creditsConsumed),
+    creditsRemainingNvidia: Math.max(0, current.creditsRemainingNvidia - creditsConsumedNvidia),
+    openRouterDailyRequestsUsed: openRouterReqs,
+    openRouterDailyLimit: current.openRouterDailyLimit || 50,
+    openRouterRpmLimit: current.openRouterRpmLimit || 20,
     costTotalBrl: current.costTotalBrl + costBrl,
-    history: [newRecord, ...current.history].slice(0, 50), // guarda últimas 50
+    history: [newRecord, ...current.history].slice(0, 50),
   };
 
   saveTelemetryData(updated);
@@ -104,6 +118,9 @@ export function resetTelemetryData(): TelemetrySummary {
     creditsUsedNvidia: 0,
     creditsLimitNvidia: 1000,
     creditsRemainingNvidia: 1000,
+    openRouterDailyRequestsUsed: 0,
+    openRouterDailyLimit: 50,
+    openRouterRpmLimit: 20,
     costTotalBrl: 0.0,
     history: [],
   };
@@ -118,6 +135,9 @@ function getDefaultTelemetry(): TelemetrySummary {
     creditsUsedNvidia: 0,
     creditsLimitNvidia: 1000,
     creditsRemainingNvidia: 1000,
+    openRouterDailyRequestsUsed: 0,
+    openRouterDailyLimit: 50,
+    openRouterRpmLimit: 20,
     costTotalBrl: 0.0,
     history: [],
   };
